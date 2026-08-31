@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from maiku.adapters.context import CallCancelled, CallContext
 from maiku.adapters.uri import ParticipantURI
 from maiku.descriptor.participant import ParticipantDescriptor
+from maiku.descriptor.validate import argument_errors
 from maiku.wire.events import Event, Failed, Finished, Started
 from maiku.wire.health import Health
 from maiku.wire.task import TaskState
@@ -51,6 +52,8 @@ class Adapter(ABC):
     scheme: ClassVar[str]
     version: ClassVar[str] = "0.0.1"
 
+    _cached: ParticipantDescriptor | None = None
+
     @classmethod
     def can_handle(cls, uri: ParticipantURI) -> bool:
         return uri.scheme == cls.scheme
@@ -74,6 +77,16 @@ class Adapter(ABC):
         self, affordance: str, arguments: dict[str, Any], ctx: CallContext
     ) -> AsyncIterator[Event]:
         """Run one call, as a stream ending in exactly one terminal event."""
+
+    async def descriptor(self) -> ParticipantDescriptor:
+        """describe(), cached for the life of this adapter instance.
+
+        Descriptors are stable by construction, so the cache costs nothing and spares
+        adapters that describe over a network a round trip on every call.
+        """
+        if self._cached is None:
+            self._cached = await self.describe()
+        return self._cached
 
     async def probe(self) -> Health:
         started = time.perf_counter()
@@ -126,6 +139,19 @@ async def guarded(
             ctx._outbox.put_nowait(sentinel)
 
     yield stamp(Started(participant=ctx.participant, affordance=affordance))
+
+    try:
+        declared = (await adapter.descriptor()).affordance(affordance)
+        if problems := argument_errors(declared, arguments):
+            raise InvalidArguments(
+                f"arguments for {affordance!r} are invalid", detail={"errors": problems}
+            )
+    except KeyError:
+        yield stamp(UnknownAffordance(f"no affordance {affordance!r}").as_event())
+        return
+    except AdapterError as exc:
+        yield stamp(exc.as_event())
+        return
 
     worker = asyncio.create_task(pump())
     try:

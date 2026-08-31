@@ -91,3 +91,9 @@ class AdapterContract:
 
         card = a2a.to_agent_card(descriptor)
         assert len(card["skills"]) == len(descriptor.affordances)
+
+    async def test_extra_arguments_are_rejected_by_the_contract(self, adapter, sample_call):
+        """Enforced by guarded(), so it holds for every adapter and not just the strict ones."""
+        name, arguments = sample_call
+        events = await drain(adapter, name, {**arguments, "__unexpected__": 1}, self.context())
+        assert isinstance(events[-1], Failed | Finished)

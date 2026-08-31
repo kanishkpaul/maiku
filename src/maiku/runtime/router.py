@@ -14,17 +14,17 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from maiku.adapters.base import Adapter, UnknownAffordance, guarded
+from maiku.adapters.base import Adapter, InvalidArguments, UnknownAffordance, guarded
 from maiku.adapters.context import CallContext
 from maiku.adapters.registry import open_participant
 from maiku.descriptor.affordance import Affordance
 from maiku.descriptor.enums import Approval, SideEffect
 from maiku.descriptor.participant import ParticipantDescriptor
+from maiku.descriptor.validate import argument_errors, result_errors
 from maiku.runtime.artifacts import ArtifactStore, ScopedArtifacts
 from maiku.runtime.grants import Denied, Grant, root_grant
 from maiku.runtime.registry import Registry
 from maiku.runtime.space import Space
-from maiku.runtime.validation import check_arguments, result_warnings
 from maiku.wire.events import (
     ArtifactWritten,
     Event,
@@ -145,7 +145,11 @@ class Router:
                 side_effect=affordance.side_effects,
                 scopes=set(affordance.scopes),
             )
-            check_arguments(affordance, arguments)
+            if problems := argument_errors(affordance, arguments):
+                raise InvalidArguments(
+                    f"arguments for {affordance_name!r} are invalid",
+                    detail={"errors": problems},
+                )
         except (Denied, UnknownAffordance) as exc:
             yield self._terminate(task, Failed(code="denied", message=str(exc)))
             return
@@ -229,7 +233,7 @@ class Router:
                 elif isinstance(event, Finished):
                     task.result = event.result
                     task.status.state = event.state
-                    for warning in result_warnings(affordance, event.result):
+                    for warning in result_errors(affordance, event.result):
                         yield Log(level="warning", message=f"result schema: {warning}")
                 elif isinstance(event, Failed):
                     task.status.state = TaskState.FAILED
