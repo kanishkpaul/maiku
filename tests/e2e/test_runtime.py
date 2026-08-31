@@ -182,17 +182,29 @@ async def test_a_read_only_affordance_needs_nobody(workspace):
         )
 
 
-async def test_stopping_early_still_cleans_up(workspace):
-    """A caller that stops reading must not leave the adapter's cleanup to the collector."""
-    closed = []
+async def test_stopping_early_cleans_up_when_the_caller_closes_the_stream(workspace):
+    """`async for` plus `break` does not close a generator - only the caller can.
 
+    Session.result and the CLI do this for you; a caller driving session.call() by hand has
+    to, and this is what it looks like.
+    """
+    from contextlib import aclosing
+
+    seen = []
     async with workspace.session() as s:
-        async for event in s.call("test/sample", "tokens", {"text": "a b c d e"}):
-            if isinstance(event, Delta):
-                closed.append(event)
-                break
+        async with aclosing(s.call("test/sample", "tokens", {"text": "a b c d e"})) as stream:
+            async for event in stream:
+                if isinstance(event, Delta):
+                    seen.append(event)
+                    break
 
         task = next(t for t in s.router.tasks.values() if t.affordance == "tokens")
+        assert task.id not in s.router._contexts
 
-    assert len(closed) == 1
-    assert task.id not in s.router._contexts
+    assert len(seen) == 1
+
+
+async def test_result_cleans_up_after_itself(workspace):
+    async with workspace.session() as s:
+        await s.result("test/sample", "tokens", {"text": "a b"})
+        assert s.router._contexts == {}
