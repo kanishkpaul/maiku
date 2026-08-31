@@ -26,7 +26,6 @@ from maiku.runtime.grants import Denied, Grant, root_grant
 from maiku.runtime.registry import Registry
 from maiku.runtime.space import Space
 from maiku.wire.events import (
-    ArtifactWritten,
     Event,
     Failed,
     Finished,
@@ -34,7 +33,7 @@ from maiku.wire.events import (
     NeedsApproval,
     NeedsInput,
 )
-from maiku.wire.parts import ArtifactRef
+from maiku.wire.parts import ArtifactRef, DataPart, FilePart, TextPart
 from maiku.wire.task import Task, TaskState, new_id
 
 Responder = Callable[[NeedsInput | NeedsApproval], Awaitable[Any]]
@@ -80,6 +79,7 @@ class Router:
         session_id: str,
         responder: Responder = deny_everything,
         observer: Observer | None = None,
+        narrate: bool = True,
     ) -> None:
         self.registry = registry
         self.store = store
@@ -87,6 +87,7 @@ class Router:
         self.session_id = session_id
         self.responder = responder
         self.observer = observer
+        self.narrate = narrate
         self.tasks: dict[str, Task] = {}
         self._adapters: dict[str, Adapter] = {}
         self._contexts: dict[str, CallContext] = {}
@@ -135,7 +136,7 @@ class Router:
         try:
             affordance = descriptor.affordance(affordance_name)
         except KeyError as exc:
-            yield self._terminate(task, Failed(code="unknown_affordance", message=str(exc)))
+            yield self._terminate(task, Failed(code="unknown_affordance", message=str(exc)), caller)
             return
 
         try:
@@ -151,7 +152,7 @@ class Router:
                     detail={"errors": problems},
                 )
         except (Denied, UnknownAffordance) as exc:
-            yield self._terminate(task, Failed(code="denied", message=str(exc)))
+            yield self._terminate(task, Failed(code="denied", message=str(exc)), caller)
             return
         except Exception as exc:
             yield self._terminate(
@@ -161,6 +162,7 @@ class Router:
                     message=str(exc),
                     detail=getattr(exc, "detail", {}),
                 ),
+                caller,
             )
             return
 
@@ -174,7 +176,9 @@ class Router:
             yield request
             if not await self.responder(request):
                 yield self._terminate(
-                    task, Failed(code="approval_denied", message="approval was refused")
+                    task,
+                    Failed(code="approval_denied", message="approval was refused"),
+                    caller,
                 )
                 return
 
@@ -193,10 +197,15 @@ class Router:
     async def _run(self, call: Call) -> AsyncIterator[Event]:
         task, affordance = call.task, call.affordance
         produced: list[ArtifactRef] = []
+
+        def produced_artifact(ref: ArtifactRef) -> None:
+            produced.append(ref)
+            self._post(call.descriptor.handle, [FilePart(ref=ref)], task=task)
+
         artifacts = ScopedArtifacts(
             self.store,
             readable=call.readable | set(call.grant.artifacts),
-            on_write=produced.append,
+            on_write=produced_artifact,
         )
         ctx = CallContext(
             session_id=self.session_id,
@@ -208,13 +217,21 @@ class Router:
         )
         self._contexts[task.id] = ctx
         task.status.state = TaskState.WORKING
+        self._post(
+            call.caller or "user",
+            [DataPart(data=call.arguments)],
+            mentions=[call.descriptor.handle],
+            task=task,
+        )
 
         pending: list[asyncio.Task] = []
         try:
             adapter = await self.adapter_for(call.descriptor.handle)
         except Exception as exc:
             yield self._terminate(
-                task, Failed(code="unreachable", message=f"{type(exc).__name__}: {exc}")
+                task,
+                Failed(code="unreachable", message=f"{type(exc).__name__}: {exc}"),
+                call.caller,
             )
             return
 
@@ -228,16 +245,27 @@ class Router:
                         if isinstance(event, NeedsInput)
                         else TaskState.APPROVAL_REQUIRED
                     )
-                elif isinstance(event, ArtifactWritten):
-                    artifacts.grant(event.ref.digest)
                 elif isinstance(event, Finished):
                     task.result = event.result
                     task.status.state = event.state
+                    self._post(
+                        call.descriptor.handle,
+                        [DataPart(data=event.result)],
+                        mentions=[call.caller] if call.caller else [],
+                        task=task,
+                    )
                     for warning in result_errors(affordance, event.result):
                         yield Log(level="warning", message=f"result schema: {warning}")
                 elif isinstance(event, Failed):
                     task.status.state = TaskState.FAILED
                     task.status.detail = event.message
+                    self._post(
+                        call.descriptor.handle,
+                        [TextPart(text=f"{event.code}: {event.message}")],
+                        mentions=[call.caller] if call.caller else [],
+                        task=task,
+                        metadata={"failed": True},
+                    )
 
                 self._observe(event)
                 yield event
@@ -259,11 +287,44 @@ class Router:
         except Exception:
             ctx.deliver(request.request_id, False if isinstance(request, NeedsApproval) else None)
 
-    def _terminate(self, task: Task, event: Failed) -> Failed:
+    def _terminate(self, task: Task, event: Failed, caller: str | None = None) -> Failed:
         task.status.state = TaskState.FAILED
         task.status.detail = event.message
+        self._post(
+            task.participant,
+            [TextPart(text=f"{event.code}: {event.message}")],
+            task=task,
+            mentions=[caller] if caller else [],
+            metadata={"failed": True},
+        )
         self._observe(event)
         return event
+
+    def _post(
+        self,
+        author: str,
+        parts: list[Any],
+        *,
+        task: Task,
+        mentions: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Record the call in the shared space, one thread per task.
+
+        Without this the space is an empty room: a participant can only ever learn about
+        work it was directly handed. Posting requests, results and produced artifacts is
+        what lets one that was not part of the original plan notice relevant output.
+        """
+        if not self.narrate:
+            return
+        self.space.post(
+            author,
+            parts,
+            mentions=mentions or [],
+            thread_id=task.id,
+            task_id=task.id,
+            metadata=metadata or {},
+        )
 
     def _observe(self, event: Event) -> None:
         if self.observer is not None:
