@@ -15,7 +15,12 @@ from maiku.adapters.base import Adapter, AdapterError, InvalidArguments, Unknown
 from maiku.adapters.context import CallContext
 from maiku.adapters.convert import collapse, to_part
 from maiku.adapters.decorator import overrides_for
-from maiku.adapters.introspect import describe_callable, public_callables, split_docstring
+from maiku.adapters.introspect import (
+    context_params,
+    describe_callable,
+    public_callables,
+    split_docstring,
+)
 from maiku.adapters.registry import register
 from maiku.adapters.uri import InvalidURI, ParticipantURI
 from maiku.descriptor.affordance import Affordance
@@ -137,8 +142,9 @@ class PythonAdapter(Adapter):
         if fn is None:
             raise UnknownAffordance(f"{affordance!r} not in {sorted(self._callables)}")
 
+        call_args = dict(arguments) | dict.fromkeys(context_params(fn), ctx)
         try:
-            inspect.signature(fn).bind(**arguments)
+            inspect.signature(fn).bind(**call_args)
         except TypeError as exc:
             raise InvalidArguments(str(exc)) from exc
 
@@ -146,7 +152,7 @@ class PythonAdapter(Adapter):
         chunks: list[Any] = []
         index = 0
 
-        async for item in _aiter(fn, arguments):
+        async for item in _aiter(fn, call_args):
             ctx.raise_if_cancelled()
             chunks.append(item)
             if streaming:

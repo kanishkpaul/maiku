@@ -31,9 +31,7 @@ def test_mcp_tool_carries_schema_and_routing_metadata(descriptor):
     ],
 )
 def test_side_effects_become_mcp_hints(effect, read_only, destructive, open_world):
-    d = make_descriptor(
-        affordances=[Affordance(name="act", summary="Do it", side_effects=effect)]
-    )
+    d = make_descriptor(affordances=[Affordance(name="act", summary="Do it", side_effects=effect)])
     hints = mcp.to_tools(d)[0]["annotations"]
     assert hints["readOnlyHint"] is read_only
     assert hints["destructiveHint"] is destructive

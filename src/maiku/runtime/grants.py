@@ -20,6 +20,10 @@ WILDCARD = "*"
 SEPARATOR = "#"
 
 
+def scopes_satisfied(held: set[str], needed: set[str]) -> bool:
+    return WILDCARD in held or needed <= held
+
+
 class Escalation(PermissionError):
     """A derived grant tried to claim authority its parent did not hold."""
 
@@ -91,7 +95,7 @@ class Grant(BaseModel):
             return False
         if SIDE_EFFECT_ORDER[side_effect] > SIDE_EFFECT_ORDER[self.max_side_effect]:
             return False
-        return (scopes or set()) <= self.scopes
+        return scopes_satisfied(self.scopes, scopes or set())
 
     def check(
         self,
@@ -123,7 +127,7 @@ def assert_narrows(parent: Grant, child: Grant) -> None:
     for capability in child.capabilities:
         if not parent.covers(capability):
             raise Escalation(f"{capability} exceeds {parent.id}")
-    if not child.scopes <= parent.scopes:
+    if not scopes_satisfied(parent.scopes, child.scopes):
         raise Escalation(f"scopes {sorted(child.scopes - parent.scopes)} exceed {parent.id}")
     if not child.artifacts <= parent.artifacts:
         raise Escalation(f"artifacts exceed {parent.id}")
@@ -141,6 +145,7 @@ def root_grant(subject: str, issuer: str = "user") -> Grant:
         issuer=issuer,
         subject=subject,
         capabilities=[Capability()],
+        scopes={WILDCARD},
         max_side_effect=SideEffect.IRREVERSIBLE,
     )
 

@@ -5,7 +5,7 @@ description = "The universal adapter for AI systems"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-dependencies = ["pydantic>=2.9"]
+dependencies = ["pydantic>=2.9", "jsonschema>=4.23"]
 
 [project.optional-dependencies]
 cli = ["typer>=0.15", "rich>=13.9"]
@@ -20,7 +20,7 @@ trace = ["opentelemetry-sdk>=1.29"]
 maiku = "maiku.cli.main:app"
 
 [dependency-groups]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "jsonschema>=4.23", "ruff>=0.8"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8"]
 
 [build-system]
 requires = ["hatchling"]

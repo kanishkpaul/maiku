@@ -16,6 +16,7 @@ from maiku.descriptor.affordance import EMPTY_OBJECT_SCHEMA, Affordance
 from maiku.descriptor.enums import AffordanceKind, Determinism, LatencyClass
 
 SKIP_PARAMS = frozenset({"self", "cls"})
+CONTEXT_TYPES = ("CallContext",)
 VARIADIC = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
 
 ANY_SCHEMA: dict[str, Any] = {}
@@ -39,12 +40,27 @@ def _annotations(fn: Callable[..., Any]) -> dict[str, Any]:
         return {}
 
 
+def context_params(fn: Callable[..., Any]) -> list[str]:
+    """Parameters the runtime supplies rather than the caller.
+
+    A function that annotates a parameter as `CallContext` gets artifact access and the
+    human channel, without that plumbing leaking into the schema its callers see.
+    """
+    hints = _annotations(fn)
+    return [
+        name
+        for name, annotation in hints.items()
+        if name != "return" and getattr(annotation, "__name__", "") in CONTEXT_TYPES
+    ]
+
+
 def input_schema(fn: Callable[..., Any]) -> dict[str, Any]:
     hints = _annotations(fn)
+    injected = set(context_params(fn))
     fields: dict[str, Any] = {}
 
     for name, param in inspect.signature(fn).parameters.items():
-        if name in SKIP_PARAMS or param.kind in VARIADIC:
+        if name in SKIP_PARAMS or name in injected or param.kind in VARIADIC:
             continue
         annotation = hints.get(name, Any)
         default = ... if param.default is inspect.Parameter.empty else param.default

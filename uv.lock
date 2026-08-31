@@ -1124,6 +1124,7 @@ name = "maiku"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "pydantic" },
 ]
 
@@ -1153,7 +1154,6 @@ trace = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -1162,6 +1162,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", marker = "extra == 'net'", specifier = ">=0.28" },
+    { name = "jsonschema", specifier = ">=4.23" },
     { name = "litellm", marker = "extra == 'llm'", specifier = ">=1.55" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2" },
     { name = "opentelemetry-sdk", marker = "extra == 'trace'", specifier = ">=1.29" },
@@ -1175,7 +1176,6 @@ provides-extras = ["cli", "net", "mcp", "llm", "hf", "torch", "trace"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema", specifier = ">=4.23" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.8" },

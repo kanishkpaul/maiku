@@ -1,5 +1,7 @@
 """The adapter contract: four methods, and everything in the world fits behind them."""
 
+import asyncio
+import contextlib
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -96,11 +98,13 @@ async def guarded(
 ) -> AsyncIterator[Event]:
     """Wrap `invoke` so the stream invariant holds even when an adapter misbehaves.
 
-    Adapters are third-party code. Enforcing "one terminal event, last" here rather than
-    trusting each author is the difference between a contract and a convention.
+    Also the merge point for events the adapter emits out of band via the context, so all
+    stream discipline - ordering, sequencing, exactly one terminal event - lives here
+    rather than being re-derived by every adapter author.
     """
     seq = 0
     terminated = False
+    sentinel = object()
 
     def stamp(event: Event) -> Event:
         nonlocal seq
@@ -108,25 +112,35 @@ async def guarded(
         seq += 1
         return event
 
+    async def pump() -> None:
+        try:
+            async for event in adapter.invoke(affordance, arguments, ctx):
+                ctx._outbox.put_nowait(event)
+        except CallCancelled:
+            ctx._outbox.put_nowait(Finished(state=TaskState.CANCELED))
+        except AdapterError as exc:
+            ctx._outbox.put_nowait(exc.as_event())
+        except Exception as exc:
+            ctx._outbox.put_nowait(Failed(message=f"{type(exc).__name__}: {exc}"))
+        finally:
+            ctx._outbox.put_nowait(sentinel)
+
     yield stamp(Started(participant=ctx.participant, affordance=affordance))
+
+    worker = asyncio.create_task(pump())
     try:
-        async for event in adapter.invoke(affordance, arguments, ctx):
+        while True:
+            item = await ctx._outbox.get()
+            if item is sentinel:
+                break
             if terminated:
                 continue
-            terminated = type(event).terminal
-            yield stamp(event)
-    except CallCancelled:
-        if not terminated:
-            terminated = True
-            yield stamp(Finished(state=TaskState.CANCELED))
-    except AdapterError as exc:
-        if not terminated:
-            terminated = True
-            yield stamp(exc.as_event())
-    except Exception as exc:
-        if not terminated:
-            terminated = True
-            yield stamp(Failed(message=f"{type(exc).__name__}: {exc}"))
+            terminated = type(item).terminal
+            yield stamp(item)
+    finally:
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await worker
 
     if not terminated:
         yield stamp(Finished())
