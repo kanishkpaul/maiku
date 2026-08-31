@@ -1161,6 +1161,7 @@ dev = [
     { name = "httpx" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "opentelemetry-sdk" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -1187,6 +1188,7 @@ provides-extras = ["cli", "net", "mcp", "llm", "hf", "torch", "array", "trace"]
 dev = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "numpy", specifier = ">=2.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.29" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.8" },

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from contextlib import aclosing
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -213,24 +214,25 @@ def schemes() -> None:
 
 async def _stream(session: Any, handle: str, affordance: str, arguments: dict[str, Any]) -> None:
     streamed = False
-    async for event in session.call(handle, affordance, arguments):
-        if isinstance(event, Delta):
-            sys.stdout.write(render.delta_text(event))
-            sys.stdout.flush()
-            streamed = True
-        elif line := render.event_line(event):
-            if streamed:
-                sys.stdout.write("\n")
-                streamed = False
-            typer.echo(line, err=True)
+    async with aclosing(session.call(handle, affordance, arguments)) as stream:
+        async for event in stream:
+            if isinstance(event, Delta):
+                sys.stdout.write(render.delta_text(event))
+                sys.stdout.flush()
+                streamed = True
+            elif line := render.event_line(event):
+                if streamed:
+                    sys.stdout.write("\n")
+                    streamed = False
+                typer.echo(line, err=True)
 
-        if isinstance(event, Finished):
-            if streamed:
-                sys.stdout.write("\n")
-            elif event.result is not None:
-                typer.echo(render.result_text(event))
-        elif isinstance(event, Failed):
-            raise typer.Exit(1)
+            if isinstance(event, Finished):
+                if streamed:
+                    sys.stdout.write("\n")
+                elif event.result is not None:
+                    typer.echo(render.result_text(event))
+            elif isinstance(event, Failed):
+                raise typer.Exit(1)
 
 
 def _lookup(ws: Workspace, handle: str) -> Any:

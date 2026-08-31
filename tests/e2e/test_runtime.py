@@ -180,3 +180,19 @@ async def test_a_read_only_affordance_needs_nobody(workspace):
         assert await s.result("test/deploy", "dry_run", {"target": "prod"}) == (
             "would deploy to prod"
         )
+
+
+async def test_stopping_early_still_cleans_up(workspace):
+    """A caller that stops reading must not leave the adapter's cleanup to the collector."""
+    closed = []
+
+    async with workspace.session() as s:
+        async for event in s.call("test/sample", "tokens", {"text": "a b c d e"}):
+            if isinstance(event, Delta):
+                closed.append(event)
+                break
+
+        task = next(t for t in s.router.tasks.values() if t.affordance == "tokens")
+
+    assert len(closed) == 1
+    assert task.id not in s.router._contexts

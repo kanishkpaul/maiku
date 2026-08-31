@@ -6,6 +6,7 @@ what is worth keeping.
 """
 
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from typing import Any
 
 from maiku.descriptor.enums import SideEffect
@@ -98,14 +99,20 @@ class Session:
         caller: str | None = None,
         readable: set[str] | None = None,
     ) -> Any:
-        """Run a call to completion and hand back just the answer."""
-        async for event in self.call(
-            handle, affordance, arguments, caller=caller, readable=readable
-        ):
-            if isinstance(event, Failed):
-                raise CallFailed(event)
-            if isinstance(event, Finished):
-                return event.result
+        """Run a call to completion and hand back just the answer.
+
+        Closed explicitly rather than abandoned on the early return: an async generator
+        dropped mid-stream defers its finally blocks to garbage collection, which leaves
+        adapter cleanup pending and trace spans open for an unbounded time.
+        """
+        async with aclosing(
+            self.call(handle, affordance, arguments, caller=caller, readable=readable)
+        ) as stream:
+            async for event in stream:
+                if isinstance(event, Failed):
+                    raise CallFailed(event)
+                if isinstance(event, Finished):
+                    return event.result
         return None
 
     async def close(self) -> None:

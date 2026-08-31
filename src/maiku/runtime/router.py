@@ -11,6 +11,7 @@ methods, and authorization, validation, artifact scoping and human escalation co
 import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,6 +26,7 @@ from maiku.runtime.artifacts import ArtifactStore, ScopedArtifacts
 from maiku.runtime.grants import Denied, Grant, root_grant
 from maiku.runtime.registry import Registry
 from maiku.runtime.space import Space
+from maiku.runtime.trace import call_attributes, default_tracer
 from maiku.wire.events import (
     ArtifactWritten,
     Event,
@@ -81,6 +83,7 @@ class Router:
         responder: Responder = deny_everything,
         observer: Observer | None = None,
         narrate: bool = True,
+        tracer: Any = None,
     ) -> None:
         self.registry = registry
         self.store = store
@@ -89,6 +92,7 @@ class Router:
         self.responder = responder
         self.observer = observer
         self.narrate = narrate
+        self.tracer = tracer or default_tracer()
         self.tasks: dict[str, Task] = {}
         self._adapters: dict[str, Adapter] = {}
         self._contexts: dict[str, CallContext] = {}
@@ -192,8 +196,11 @@ class Router:
             caller=caller,
             readable=set(readable or ()),
         )
-        async for event in self._run(call):
-            yield event
+        # Closed rather than abandoned: a caller that stops reading early must still run
+        # the inner generator's cleanup, or adapters leak and spans never close.
+        async with aclosing(self._run(call)) as stream:
+            async for event in stream:
+                yield event
 
     async def _run(self, call: Call) -> AsyncIterator[Event]:
         task, affordance = call.task, call.affordance
@@ -232,6 +239,14 @@ class Router:
         )
 
         pending: list[asyncio.Task] = []
+        attributes = call_attributes(
+            call.descriptor,
+            affordance.name,
+            session_id=self.session_id,
+            task_id=task.id,
+            caller=call.caller,
+        )
+
         try:
             adapter = await self.adapter_for(call.descriptor.handle)
         except Exception as exc:
@@ -243,44 +258,46 @@ class Router:
             return
 
         try:
-            async for event in guarded(adapter, affordance.name, call.arguments, ctx):
-                if isinstance(event, NeedsInput | NeedsApproval):
-                    ctx.expect(event.request_id)
-                    pending.append(asyncio.create_task(self._answer(ctx, event)))
-                    task.status.state = (
-                        TaskState.INPUT_REQUIRED
-                        if isinstance(event, NeedsInput)
-                        else TaskState.APPROVAL_REQUIRED
-                    )
-                elif isinstance(event, ArtifactWritten):
-                    self._post(call.descriptor.handle, [FilePart(ref=event.ref)], task=task)
-                elif isinstance(event, Finished):
-                    task.result = event.result
-                    task.status.state = event.state
-                    self._post(
-                        call.descriptor.handle,
-                        [DataPart(data=event.result)],
-                        mentions=[call.caller] if call.caller else [],
-                        task=task,
-                    )
-                    for warning in result_errors(affordance, event.result):
-                        yield Log(level="warning", message=f"result schema: {warning}")
-                elif isinstance(event, Failed):
-                    task.status.state = TaskState.FAILED
-                    task.status.detail = event.message
-                    self._post(
-                        call.descriptor.handle,
-                        [TextPart(text=f"{event.code}: {event.message}")],
-                        mentions=[call.caller] if call.caller else [],
-                        task=task,
-                        metadata={"failed": True},
-                    )
+            with self.tracer.span(attributes) as span:
+                async for event in guarded(adapter, affordance.name, call.arguments, ctx):
+                    span.record(event)
+                    if isinstance(event, NeedsInput | NeedsApproval):
+                        ctx.expect(event.request_id)
+                        pending.append(asyncio.create_task(self._answer(ctx, event)))
+                        task.status.state = (
+                            TaskState.INPUT_REQUIRED
+                            if isinstance(event, NeedsInput)
+                            else TaskState.APPROVAL_REQUIRED
+                        )
+                    elif isinstance(event, ArtifactWritten):
+                        self._post(call.descriptor.handle, [FilePart(ref=event.ref)], task=task)
+                    elif isinstance(event, Finished):
+                        task.result = event.result
+                        task.status.state = event.state
+                        self._post(
+                            call.descriptor.handle,
+                            [DataPart(data=event.result)],
+                            mentions=[call.caller] if call.caller else [],
+                            task=task,
+                        )
+                        for warning in result_errors(affordance, event.result):
+                            yield Log(level="warning", message=f"result schema: {warning}")
+                    elif isinstance(event, Failed):
+                        task.status.state = TaskState.FAILED
+                        task.status.detail = event.message
+                        self._post(
+                            call.descriptor.handle,
+                            [TextPart(text=f"{event.code}: {event.message}")],
+                            mentions=[call.caller] if call.caller else [],
+                            task=task,
+                            metadata={"failed": True},
+                        )
 
-                self._observe(event)
-                yield event
+                    self._observe(event)
+                    yield event
 
-            for ref in produced:
-                task.metadata.setdefault("artifacts", []).append(ref.digest)
+                for ref in produced:
+                    task.metadata.setdefault("artifacts", []).append(ref.digest)
         finally:
             for job in pending:
                 job.cancel()
