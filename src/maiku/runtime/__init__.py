@@ -4,6 +4,7 @@ from maiku.runtime.artifacts import (
     ArtifactStore,
     ScopedArtifacts,
 )
+from maiku.runtime.escalation import first_available, route_to
 from maiku.runtime.grants import Capability, Denied, Escalation, Grant, root_grant
 from maiku.runtime.home import home
 from maiku.runtime.registry import Entry, Registry, UnknownParticipant
@@ -31,6 +32,8 @@ __all__ = [
     "UnknownParticipant",
     "Workspace",
     "auto_approve_below",
+    "first_available",
     "home",
     "root_grant",
+    "route_to",
 ]

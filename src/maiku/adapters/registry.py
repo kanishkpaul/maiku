@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from maiku.adapters.base import Adapter
 
 BUILTIN_SCHEMES: dict[str, str] = {
+    "human": "maiku.adapters.human",
     "python": "maiku.adapters.python_fn",
 }
 
