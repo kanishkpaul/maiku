@@ -14,7 +14,12 @@ if TYPE_CHECKING:
 
 BUILTIN_SCHEMES: dict[str, str] = {
     "human": "maiku.adapters.human",
+    "lmstudio": "maiku.adapters.openai_compat",
+    "ollama": "maiku.adapters.openai_compat",
+    "openai": "maiku.adapters.openai_compat",
+    "openrouter": "maiku.adapters.openai_compat",
     "python": "maiku.adapters.python_fn",
+    "vllm": "maiku.adapters.openai_compat",
 }
 
 _registered: dict[str, type["Adapter"]] = {}
