@@ -113,9 +113,6 @@ class HumanAdapter(Adapter):
     async def open(cls, uri: ParticipantURI) -> "HumanAdapter":
         return cls(uri, channel_named(uri.param("channel", "cli") or "cli"))
 
-    def with_channel(self, channel: Channel) -> "HumanAdapter":
-        return HumanAdapter(self._uri, channel)
-
     async def describe(self) -> ParticipantDescriptor:
         return ParticipantDescriptor(
             handle=f"human/{self._name}",

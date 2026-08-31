@@ -98,10 +98,6 @@ def affordance_kind(fn: Callable[..., Any]) -> AffordanceKind:
     return AffordanceKind.INVOKE
 
 
-def is_async(fn: Callable[..., Any]) -> bool:
-    return inspect.iscoroutinefunction(fn) or inspect.isasyncgenfunction(fn)
-
-
 def yields_type(fn: Callable[..., Any]) -> Any:
     """Element type of a generator's return annotation, if it declares one."""
     annotation = _annotations(fn).get("return", Any)

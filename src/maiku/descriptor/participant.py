@@ -17,7 +17,6 @@ from maiku.descriptor.enums import (
     Approval,
     Device,
     Kind,
-    LatencyClass,
     ProbeKind,
     Residency,
     SideEffect,
@@ -211,8 +210,3 @@ class ParticipantDescriptor(BaseModel):
     @property
     def worst_side_effect(self) -> SideEffect:
         return max_side_effect([a.side_effects for a in self.affordances])
-
-    @property
-    def slowest(self) -> LatencyClass:
-        order = list(LatencyClass)
-        return max((a.latency_class for a in self.affordances), key=order.index)

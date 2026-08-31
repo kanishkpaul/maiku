@@ -55,10 +55,6 @@ class Adapter(ABC):
     _cached: ParticipantDescriptor | None = None
 
     @classmethod
-    def can_handle(cls, uri: ParticipantURI) -> bool:
-        return uri.scheme == cls.scheme
-
-    @classmethod
     @abstractmethod
     async def open(cls, uri: ParticipantURI) -> "Adapter":
         """Connect to the underlying thing. May be expensive; called once per lifetime."""

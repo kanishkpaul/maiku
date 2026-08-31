@@ -39,6 +39,7 @@ maiku ls
 maiku find "transcribe audio"
 maiku call mypackage/scoring score --arg text="how did we do"
 maiku serve mcp                             # all of it, as MCP tools
+maiku serve a2a                             # or as an A2A agent
 ```
 
 That last line is the point. Adapt a PyTorch model and Claude Code can call it — still as a
@@ -103,7 +104,9 @@ maiku describe local/vision --as openai   # OpenAI function tools
 ```
 
 Both directions work, and there are tests for the round trips: an ingested MCP server can be
-listed as A2A skills; an ingested A2A agent can be called as MCP tools.
+served back out over A2A; an ingested A2A agent can be called as MCP tools. Calls emit
+OpenTelemetry spans using the GenAI conventions when the SDK is installed, and stay silent
+when it is not.
 
 ## What this does not do
 

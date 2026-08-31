@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from collections.abc import Iterable
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -220,7 +219,3 @@ def _fts_query(query: str) -> str:
     """Quote each term so user text cannot be read as FTS5 operator syntax."""
     terms = [t.replace('"', "") for t in query.split() if t.strip()]
     return " OR ".join(f'"{t}"' for t in terms) or '""'
-
-
-def bulk_add(registry: Registry, pairs: Iterable[tuple[ParticipantDescriptor, str]]) -> int:
-    return sum(1 for descriptor, uri in pairs if registry.add(descriptor, uri))

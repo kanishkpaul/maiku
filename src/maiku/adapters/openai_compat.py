@@ -160,10 +160,6 @@ class OpenAICompatible(Adapter):
         self._owns_client = client is None
 
     @classmethod
-    def can_handle(cls, uri: ParticipantURI) -> bool:
-        return uri.scheme in BY_SCHEME
-
-    @classmethod
     async def open(cls, uri: ParticipantURI) -> "OpenAICompatible":
         flavour = BY_SCHEME.get(uri.scheme)
         if flavour is None:

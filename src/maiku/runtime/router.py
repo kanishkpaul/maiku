@@ -15,7 +15,7 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Any
 
-from maiku.adapters.base import Adapter, InvalidArguments, UnknownAffordance, guarded
+from maiku.adapters.base import Adapter, guarded
 from maiku.adapters.context import CallContext
 from maiku.adapters.registry import open_participant
 from maiku.descriptor.affordance import Affordance
@@ -114,6 +114,58 @@ class Router:
         ctx = self._contexts.get(task_id)
         return bool(ctx and ctx.deliver(request_id, value))
 
+    def _admit(
+        self,
+        task: Task,
+        descriptor: ParticipantDescriptor,
+        arguments: dict[str, Any],
+        caller: str | None,
+        grant: Grant,
+        readable: set[str] | None,
+    ) -> Call | Failed:
+        """Resolve, authorize and validate, before anything expensive happens.
+
+        Everything here is decided without opening an adapter or waking a human, which is
+        the point: a call that was never going to be allowed should cost nothing.
+        """
+        try:
+            affordance = descriptor.affordance(task.affordance)
+        except KeyError as exc:
+            return self._terminate(
+                task, Failed(code="unknown_affordance", message=str(exc)), caller
+            )
+
+        try:
+            grant.check(
+                descriptor.handle,
+                affordance.name,
+                side_effect=affordance.side_effects,
+                scopes=set(affordance.scopes),
+            )
+        except Denied as exc:
+            return self._terminate(task, Failed(code="denied", message=str(exc)), caller)
+
+        if problems := argument_errors(affordance, arguments):
+            return self._terminate(
+                task,
+                Failed(
+                    code="invalid_arguments",
+                    message=f"arguments for {affordance.name!r} are invalid",
+                    detail={"errors": problems},
+                ),
+                caller,
+            )
+
+        return Call(
+            task=task,
+            descriptor=descriptor,
+            affordance=affordance,
+            arguments=arguments,
+            grant=grant,
+            caller=caller,
+            readable=set(readable or ()),
+        )
+
     async def call(
         self,
         handle: str,
@@ -125,10 +177,7 @@ class Router:
         readable: set[str] | None = None,
     ) -> AsyncIterator[Event]:
         arguments = dict(arguments or {})
-        grant = grant or root_grant(caller or "user")
-
-        entry = self.registry.get(handle)
-        descriptor = entry.descriptor
+        descriptor = self.registry.get(handle).descriptor
         task = Task(
             id=new_id("task"),
             session_id=self.session_id,
@@ -138,44 +187,18 @@ class Router:
         )
         self.tasks[task.id] = task
 
-        try:
-            affordance = descriptor.affordance(affordance_name)
-        except KeyError as exc:
-            yield self._terminate(task, Failed(code="unknown_affordance", message=str(exc)), caller)
+        admitted = self._admit(
+            task, descriptor, arguments, caller, grant or root_grant(caller or "user"), readable
+        )
+        if isinstance(admitted, Failed):
+            yield admitted
             return
 
-        try:
-            grant.check(
-                handle,
-                affordance_name,
-                side_effect=affordance.side_effects,
-                scopes=set(affordance.scopes),
-            )
-            if problems := argument_errors(affordance, arguments):
-                raise InvalidArguments(
-                    f"arguments for {affordance_name!r} are invalid",
-                    detail={"errors": problems},
-                )
-        except (Denied, UnknownAffordance) as exc:
-            yield self._terminate(task, Failed(code="denied", message=str(exc)), caller)
-            return
-        except Exception as exc:
-            yield self._terminate(
-                task,
-                Failed(
-                    code=getattr(exc, "code", "invalid_arguments"),
-                    message=str(exc),
-                    detail=getattr(exc, "detail", {}),
-                ),
-                caller,
-            )
-            return
-
-        if needs_approval(descriptor, affordance.side_effects):
+        if needs_approval(descriptor, admitted.affordance.side_effects):
             request = NeedsApproval(
                 request_id=new_id("approval"),
                 reason=f"{caller or 'user'} wants to call {handle}#{affordance_name}",
-                side_effects=affordance.side_effects.value,
+                side_effects=admitted.affordance.side_effects.value,
                 detail={"arguments": arguments},
             )
             yield request
@@ -187,18 +210,9 @@ class Router:
                 )
                 return
 
-        call = Call(
-            task=task,
-            descriptor=descriptor,
-            affordance=affordance,
-            arguments=arguments,
-            grant=grant,
-            caller=caller,
-            readable=set(readable or ()),
-        )
         # Closed rather than abandoned: a caller that stops reading early must still run
         # the inner generator's cleanup, or adapters leak and spans never close.
-        async with aclosing(self._run(call)) as stream:
+        async with aclosing(self._run(admitted)) as stream:
             async for event in stream:
                 yield event
 
@@ -264,37 +278,14 @@ class Router:
                     if isinstance(event, NeedsInput | NeedsApproval):
                         ctx.expect(event.request_id)
                         pending.append(asyncio.create_task(self._answer(ctx, event)))
-                        task.status.state = (
-                            TaskState.INPUT_REQUIRED
-                            if isinstance(event, NeedsInput)
-                            else TaskState.APPROVAL_REQUIRED
-                        )
-                    elif isinstance(event, ArtifactWritten):
-                        self._post(call.descriptor.handle, [FilePart(ref=event.ref)], task=task)
-                    elif isinstance(event, Finished):
-                        task.result = event.result
-                        task.status.state = event.state
-                        self._post(
-                            call.descriptor.handle,
-                            [DataPart(data=event.result)],
-                            mentions=[call.caller] if call.caller else [],
-                            task=task,
-                        )
-                        for warning in result_errors(affordance, event.result):
-                            yield Log(level="warning", message=f"result schema: {warning}")
-                    elif isinstance(event, Failed):
-                        task.status.state = TaskState.FAILED
-                        task.status.detail = event.message
-                        self._post(
-                            call.descriptor.handle,
-                            [TextPart(text=f"{event.code}: {event.message}")],
-                            mentions=[call.caller] if call.caller else [],
-                            task=task,
-                            metadata={"failed": True},
-                        )
 
+                    self._absorb(call, event)
                     self._observe(event)
                     yield event
+
+                    if isinstance(event, Finished):
+                        for warning in result_errors(affordance, event.result):
+                            yield Log(level="warning", message=f"result schema: {warning}")
 
                 for ref in produced:
                     task.metadata.setdefault("artifacts", []).append(ref.digest)
@@ -304,6 +295,32 @@ class Router:
             with contextlib.suppress(Exception):
                 await asyncio.gather(*pending, return_exceptions=True)
             self._contexts.pop(task.id, None)
+
+    def _absorb(self, call: Call, event: Event) -> None:
+        """Advance the task and record the event in the space. One place, one story."""
+        task = call.task
+        author, mentions = call.descriptor.handle, [call.caller] if call.caller else []
+
+        if isinstance(event, NeedsInput):
+            task.status.state = TaskState.INPUT_REQUIRED
+        elif isinstance(event, NeedsApproval):
+            task.status.state = TaskState.APPROVAL_REQUIRED
+        elif isinstance(event, ArtifactWritten):
+            self._post(author, [FilePart(ref=event.ref)], task=task)
+        elif isinstance(event, Finished):
+            task.result = event.result
+            task.status.state = event.state
+            self._post(author, [DataPart(data=event.result)], mentions=mentions, task=task)
+        elif isinstance(event, Failed):
+            task.status.state = TaskState.FAILED
+            task.status.detail = event.message
+            self._post(
+                author,
+                [TextPart(text=f"{event.code}: {event.message}")],
+                mentions=mentions,
+                task=task,
+                metadata={"failed": True},
+            )
 
     async def _answer(self, ctx: CallContext, request: NeedsInput | NeedsApproval) -> None:
         try:
