@@ -139,9 +139,7 @@ async def test_skills_become_affordances():
 
 
 async def test_a_task_is_followed_to_completion():
-    events = await drain(
-        await agent(), "search", {"message": "hello"}, AdapterContract().context()
-    )
+    events = await drain(await agent(), "search", {"message": "hello"}, AdapterContract().context())
     assert any(e.type == "progress" for e in events)
     assert events[-1].result == "the answer"
 
@@ -161,27 +159,21 @@ async def test_file_parts_become_artifacts(tmp_path):
 
 async def test_an_immediate_message_reply_needs_no_polling():
     state["mode"] = "message"
-    events = await drain(
-        await agent(), "search", {"message": "hello"}, AdapterContract().context()
-    )
+    events = await drain(await agent(), "search", {"message": "hello"}, AdapterContract().context())
     assert events[-1].result == "direct"
     assert state["polls"] == 0
 
 
 async def test_a_failed_remote_task_becomes_a_failed_event():
     state["mode"] = "failing"
-    events = await drain(
-        await agent(), "search", {"message": "hello"}, AdapterContract().context()
-    )
+    events = await drain(await agent(), "search", {"message": "hello"}, AdapterContract().context())
     assert isinstance(events[-1], Failed)
     assert "could not" in events[-1].message
 
 
 async def test_a_jsonrpc_error_becomes_a_failed_event():
     state["mode"] = "error"
-    events = await drain(
-        await agent(), "search", {"message": "hello"}, AdapterContract().context()
-    )
+    events = await drain(await agent(), "search", {"message": "hello"}, AdapterContract().context())
     assert isinstance(events[-1], Failed)
     assert "nope" in events[-1].message
 

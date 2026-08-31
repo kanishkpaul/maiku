@@ -23,18 +23,14 @@ SPEC = {
     },
     "paths": {
         "/widgets/{widget_id}": {
-            "parameters": [
-                {"name": "widget_id", "in": "path", "schema": {"type": "string"}}
-            ],
+            "parameters": [{"name": "widget_id", "in": "path", "schema": {"type": "string"}}],
             "get": {
                 "operationId": "getWidget",
                 "summary": "Fetch one widget",
                 "responses": {
                     "200": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Widget"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Widget"}}
                         }
                     }
                 },
@@ -45,9 +41,7 @@ SPEC = {
             "post": {
                 "operationId": "createWidget",
                 "summary": "Make a widget",
-                "parameters": [
-                    {"name": "dry_run", "in": "query", "schema": {"type": "boolean"}}
-                ],
+                "parameters": [{"name": "dry_run", "in": "query", "schema": {"type": "boolean"}}],
                 "requestBody": {
                     "content": {
                         "application/json": {

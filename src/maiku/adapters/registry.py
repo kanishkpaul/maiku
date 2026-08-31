@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 BUILTIN_SCHEMES: dict[str, str] = {
     "a2a": "maiku.adapters.a2a_client",
     "cli": "maiku.adapters.cli_tool",
+    "hf": "maiku.adapters.hf_pipeline",
     "http": "maiku.adapters.http_api",
     "human": "maiku.adapters.human",
     "mcp": "maiku.adapters.mcp_client",
@@ -23,6 +24,7 @@ BUILTIN_SCHEMES: dict[str, str] = {
     "openai": "maiku.adapters.openai_compat",
     "openrouter": "maiku.adapters.openai_compat",
     "python": "maiku.adapters.python_fn",
+    "torch": "maiku.adapters.torch_model",
     "vllm": "maiku.adapters.openai_compat",
 }
 
