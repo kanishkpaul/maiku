@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 BUILTIN_SCHEMES: dict[str, str] = {
     "cli": "maiku.adapters.cli_tool",
+    "http": "maiku.adapters.http_api",
     "human": "maiku.adapters.human",
     "mcp": "maiku.adapters.mcp_client",
     "lmstudio": "maiku.adapters.openai_compat",
