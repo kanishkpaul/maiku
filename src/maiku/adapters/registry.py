@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 BUILTIN_SCHEMES: dict[str, str] = {
     "human": "maiku.adapters.human",
+    "mcp": "maiku.adapters.mcp_client",
     "lmstudio": "maiku.adapters.openai_compat",
     "ollama": "maiku.adapters.openai_compat",
     "openai": "maiku.adapters.openai_compat",
