@@ -221,9 +221,10 @@ async def _stream(session: Any, handle: str, affordance: str, arguments: dict[st
                 sys.stdout.flush()
                 streamed = True
             elif line := render.event_line(event):
+                # Diagnostics go to stderr and must not disturb the stdout stream, so the
+                # newline is cosmetic only - `streamed` still records what stdout has seen.
                 if streamed:
                     sys.stdout.write("\n")
-                    streamed = False
                 typer.echo(line, err=True)
 
             if isinstance(event, Finished):

@@ -95,17 +95,38 @@ MESSAGES_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "role": {"enum": ["system", "user", "assistant"]},
-                    "content": {"type": "string"},
+                    "role": {"enum": ["system", "user", "assistant", "tool"]},
+                    # Null on an assistant turn that is only tool calls, which is exactly
+                    # the message a delegation loop has to send back.
+                    "content": {"type": ["string", "null"]},
+                    "name": {"type": "string"},
+                    "tool_calls": {"type": "array", "items": {"type": "object"}},
+                    "tool_call_id": {"type": "string"},
                 },
-                "required": ["role", "content"],
+                "required": ["role"],
             },
         },
         "temperature": {"type": "number", "minimum": 0, "maximum": 2},
         "max_tokens": {"type": "integer", "minimum": 1},
         "stop": {"type": "array", "items": {"type": "string"}},
+        "tools": {
+            "type": "array",
+            "description": "OpenAI-format tool schemas the model may call",
+            "items": {"type": "object"},
+        },
+        "tool_choice": {"type": ["string", "object"]},
     },
     "required": ["messages"],
+}
+
+CHAT_OUTPUT: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string"},
+        "tool_calls": {"type": "array", "items": {"type": "object"}},
+        "finish_reason": {"type": "string"},
+    },
+    "required": ["content"],
 }
 
 PROMPT_SCHEMA: dict[str, Any] = {
@@ -122,7 +143,6 @@ PROMPT_SCHEMA: dict[str, Any] = {
 
 def _affordances() -> list[Affordance]:
     shared = {
-        "output_schema": {"type": "string"},
         "kind": AffordanceKind.STREAM,
         "determinism": Determinism.STOCHASTIC,
         "latency_class": LatencyClass.SECONDS,
@@ -133,15 +153,20 @@ def _affordances() -> list[Affordance]:
         Affordance(
             name="chat",
             summary="Continue a conversation",
-            description="Full message list in, generated assistant turn out.",
+            description=(
+                "Full message list in, the whole assistant turn out - content plus any "
+                "tool calls. Use this when the model may need to delegate."
+            ),
             input_schema=MESSAGES_SCHEMA,
+            output_schema=CHAT_OUTPUT,
             **shared,
         ),
         Affordance(
             name="complete",
             summary="Answer a single prompt",
-            description="Convenience over chat for callers that have no conversation.",
+            description="Convenience over chat for callers that only want the text.",
             input_schema=PROMPT_SCHEMA,
+            output_schema={"type": "string"},
             **shared,
         ),
     ]
@@ -261,18 +286,22 @@ class OpenAICompatible(Adapter):
         }
 
         text: list[str] = []
+        calls = _ToolCallBuffer()
         usage: dict[str, Any] | None = None
+        finish_reason = ""
         index = 0
 
         async for chunk in self._stream(body):
             ctx.raise_if_cancelled()
             usage = chunk.get("usage") or usage
             for choice in chunk.get("choices") or ():
-                piece = (choice.get("delta") or {}).get("content")
-                if piece:
+                finish_reason = choice.get("finish_reason") or finish_reason
+                delta = choice.get("delta") or {}
+                if piece := delta.get("content"):
                     text.append(piece)
                     yield Delta(part=TextPart(text=piece), index=index)
                     index += 1
+                calls.absorb(delta.get("tool_calls") or ())
 
         if usage:
             yield Usage(
@@ -281,7 +310,18 @@ class OpenAICompatible(Adapter):
                 tokens_in=usage.get("prompt_tokens"),
                 tokens_out=usage.get("completion_tokens"),
             )
-        yield Finished(result="".join(text))
+
+        content = "".join(text)
+        if affordance == "complete":
+            yield Finished(result=content)
+            return
+        yield Finished(
+            result={
+                "content": content,
+                "tool_calls": calls.resolved(),
+                "finish_reason": finish_reason,
+            }
+        )
 
     async def _stream(self, body: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
         import httpx
@@ -314,6 +354,32 @@ class OpenAICompatible(Adapter):
         if self._client is not None and self._owns_client:
             await self._client.aclose()
         self._client = None
+
+
+class _ToolCallBuffer:
+    """Reassembles tool calls that arrive split across streaming chunks.
+
+    Providers send a call's name in one delta and its arguments a character at a time in
+    later ones, keyed only by index. Accumulating by index is the only way to get a whole
+    call back out of a stream.
+    """
+
+    def __init__(self) -> None:
+        self._calls: dict[int, dict[str, Any]] = {}
+
+    def absorb(self, deltas: Any) -> None:
+        for delta in deltas:
+            slot = self._calls.setdefault(
+                delta.get("index", 0),
+                {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
+            )
+            slot["id"] = delta.get("id") or slot["id"]
+            function = delta.get("function") or {}
+            slot["function"]["name"] = function.get("name") or slot["function"]["name"]
+            slot["function"]["arguments"] += function.get("arguments") or ""
+
+    def resolved(self) -> list[dict[str, Any]]:
+        return [self._calls[i] for i in sorted(self._calls) if self._calls[i]["function"]["name"]]
 
 
 def _from_prompt(arguments: dict[str, Any]) -> dict[str, Any]:

@@ -124,3 +124,21 @@ def test_an_mcp_server_survives_the_whole_cli_path(home):
     result = run("call", "mcp/fixture", "read_file", "-a", "path=x.md", *home)
     assert result.exit_code == 0
     assert result.stdout.strip() == "contents of x.md"
+
+
+def test_a_streamed_result_is_not_also_printed_whole(stocked, monkeypatch):
+    """A Usage or Log event arriving mid-stream must not make the result print twice."""
+    from maiku.wire.events import Delta, Finished, Usage
+    from maiku.wire.parts import TextPart
+
+    async def fake_call(handle, affordance, arguments=None, **kwargs):
+        yield Delta(part=TextPart(text="hello "), index=0)
+        yield Delta(part=TextPart(text="world"), index=1)
+        yield Usage(unit="token", amount=2)
+        yield Finished(result="hello world")
+
+    monkeypatch.setattr("maiku.runtime.session.Session.call", staticmethod(fake_call))
+    result = run("call", "test/sample", "tokens", "-a", "text=x", *stocked)
+
+    assert result.exit_code == 0
+    assert result.stdout.count("hello world") == 1
