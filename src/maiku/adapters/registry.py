@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from maiku.adapters.base import Adapter
 
 BUILTIN_SCHEMES: dict[str, str] = {
+    "a2a": "maiku.adapters.a2a_client",
     "cli": "maiku.adapters.cli_tool",
     "http": "maiku.adapters.http_api",
     "human": "maiku.adapters.human",
