@@ -11,7 +11,7 @@ from maiku.adapters.context import CallCancelled, CallContext
 from maiku.adapters.uri import ParticipantURI
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.descriptor.validate import argument_errors
-from maiku.wire.events import Event, Failed, Finished, Started
+from maiku.wire.events import ArtifactWritten, Event, Failed, Finished, Started
 from maiku.wire.health import Health
 from maiku.wire.task import TaskState
 
@@ -118,6 +118,7 @@ async def guarded(
     seq = 0
     terminated = False
     sentinel = object()
+    announced: set[str] = set()
 
     def stamp(event: Event) -> Event:
         nonlocal seq
@@ -161,6 +162,12 @@ async def guarded(
                 break
             if terminated:
                 continue
+            if isinstance(item, ArtifactWritten):
+                # The runtime announces every write; an adapter that also emits the event
+                # is being helpful, not authoritative.
+                if item.ref.digest in announced:
+                    continue
+                announced.add(item.ref.digest)
             terminated = type(item).terminal
             yield stamp(item)
     finally:

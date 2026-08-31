@@ -1,6 +1,7 @@
 """The maiku command line."""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -13,6 +14,8 @@ from maiku.adapters.uri import InvalidURI
 from maiku.cli import render
 from maiku.cli.args import collect
 from maiku.descriptor.enums import Kind
+from maiku.gateways.a2a_server import WELL_KNOWN, A2AGateway
+from maiku.gateways.http_server import run as run_http
 from maiku.gateways.mcp_server import MCPGateway
 from maiku.projections import a2a, mcp, openai_tools
 from maiku.runtime.escalation import route_to
@@ -154,22 +157,51 @@ def call(
 
 @app.command()
 def serve(
-    protocol: Annotated[str, typer.Argument(help="mcp")] = "mcp",
+    protocol: Annotated[str, typer.Argument(help="mcp | a2a")] = "mcp",
     human: Annotated[str | None, typer.Option("--human")] = None,
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8080,
     home: HomeOption = None,
 ) -> None:
     """Serve every adapted participant to an external client."""
-    if protocol != "mcp":
-        fail(f"unknown protocol {protocol!r}; try: mcp")
+    if protocol not in {"mcp", "a2a"}:
+        fail(f"unknown protocol {protocol!r}; try: mcp, a2a")
 
     async def run() -> None:
         with workspace(home) as ws:
             async with ws.session() as session:
                 if human:
                     session.responder = route_to(session, human)
-                await MCPGateway(session).serve_stdio()
+                if protocol == "mcp":
+                    await MCPGateway(session).serve_stdio()
+                    return
+
+                gateway = A2AGateway(session, base_url=f"http://{host}:{port}")
+                typer.echo(f"a2a on http://{host}:{port}{WELL_KNOWN}", err=True)
+                await run_http(_a2a_routes(gateway), host, port)
 
     _run(run())
+
+
+def _a2a_routes(gateway: Any) -> Any:
+    """Map the three routes A2A needs onto the gateway."""
+
+    async def route(method: str, path: str, body: bytes) -> tuple[int, Any]:
+        slug = _slug_from(path)
+        if method == "GET" and path.endswith(WELL_KNOWN):
+            card = gateway.agent_card(slug)
+            return (200, card) if card else (404, {"error": f"no participant {slug!r}"})
+        if method == "POST":
+            message = json.loads(body or b"{}")
+            return 200, (await gateway.rpc(message, slug) or {})
+        return 404, {"error": f"no route for {method} {path}"}
+
+    return route
+
+
+def _slug_from(path: str) -> str | None:
+    parts = [p for p in path.split("/") if p]
+    return parts[1] if len(parts) >= 2 and parts[0] == "agents" else None
 
 
 @app.command()

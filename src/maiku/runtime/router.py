@@ -26,6 +26,7 @@ from maiku.runtime.grants import Denied, Grant, root_grant
 from maiku.runtime.registry import Registry
 from maiku.runtime.space import Space
 from maiku.wire.events import (
+    ArtifactWritten,
     Event,
     Failed,
     Finished,
@@ -198,22 +199,28 @@ class Router:
         task, affordance = call.task, call.affordance
         produced: list[ArtifactRef] = []
 
-        def produced_artifact(ref: ArtifactRef) -> None:
-            produced.append(ref)
-            self._post(call.descriptor.handle, [FilePart(ref=ref)], task=task)
-
-        artifacts = ScopedArtifacts(
-            self.store,
-            readable=call.readable | set(call.grant.artifacts),
-            on_write=produced_artifact,
-        )
         ctx = CallContext(
             session_id=self.session_id,
             task_id=task.id,
             participant=call.descriptor.handle,
             caller=call.caller,
-            artifacts=artifacts,
             scopes=frozenset(call.grant.scopes),
+        )
+
+        def produced_artifact(ref: ArtifactRef) -> None:
+            """Announce every write into the call's own stream.
+
+            One source of truth: the space, the gateways and the CLI all learn about an
+            artifact the same way, instead of each re-deriving it. An adapter that also
+            emits the event is being helpful, and guarded() drops the duplicate.
+            """
+            produced.append(ref)
+            ctx.emit(ArtifactWritten(ref=ref))
+
+        ctx.artifacts = ScopedArtifacts(
+            self.store,
+            readable=call.readable | set(call.grant.artifacts),
+            on_write=produced_artifact,
         )
         self._contexts[task.id] = ctx
         task.status.state = TaskState.WORKING
@@ -245,6 +252,8 @@ class Router:
                         if isinstance(event, NeedsInput)
                         else TaskState.APPROVAL_REQUIRED
                     )
+                elif isinstance(event, ArtifactWritten):
+                    self._post(call.descriptor.handle, [FilePart(ref=event.ref)], task=task)
                 elif isinstance(event, Finished):
                     task.result = event.result
                     task.status.state = event.state

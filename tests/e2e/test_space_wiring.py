@@ -85,3 +85,17 @@ async def test_an_artifact_is_announced_once_even_when_the_adapter_also_emits_it
             files = [p for p in s.space.history() if isinstance(p.parts[0], FilePart)]
 
     assert len(files) == 1
+
+
+async def test_an_artifact_reaches_every_consumer_through_the_event_stream(session):
+    """The write hook, the space and the caller's stream must all agree."""
+    from maiku.wire.events import ArtifactWritten
+
+    events = [e async for e in session.call("local/vision", "render", {"width": 4, "height": 2})]
+    written = [e for e in events if isinstance(e, ArtifactWritten)]
+    posted = [p for p in session.space.history() if isinstance(p.parts[0], FilePart)]
+
+    assert len(written) == 1
+    assert len(posted) == 1
+    assert posted[0].parts[0].ref.digest == written[0].ref.digest
+    assert [e.seq for e in events] == list(range(len(events)))
