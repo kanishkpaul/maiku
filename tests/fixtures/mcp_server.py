@@ -48,6 +48,8 @@ TOOLS = [
 
 def call(name, arguments):
     if name == "read_file":
+        if arguments["path"] == "camera-notes.md":
+            return {"content": [{"type": "text", "text": "camera 3 faces the loading bay"}]}
         return {"content": [{"type": "text", "text": f"contents of {arguments['path']}"}]}
     if name == "render_chart":
         return {
