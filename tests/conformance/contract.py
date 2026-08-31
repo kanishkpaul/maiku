@@ -9,6 +9,7 @@ import pytest
 from maiku.adapters.base import Adapter, guarded
 from maiku.adapters.context import CallContext
 from maiku.descriptor.participant import ParticipantDescriptor
+from maiku.projections import a2a, mcp, openai_tools
 from maiku.wire.events import Failed, Finished, Started, is_terminal
 
 
@@ -77,3 +78,16 @@ class AdapterContract:
         assert descriptor.affordance(name)
         events = await drain(adapter, *sample_call, self.context())
         assert isinstance(events[-1], Finished | Failed)
+
+    async def test_descriptor_projects_to_the_ecosystem(self, adapter):
+        descriptor = await adapter.describe()
+
+        tools = mcp.to_tools(descriptor)
+        assert len(tools) == len(descriptor.affordances)
+        assert all(tool["name"].isidentifier() for tool in tools)
+        assert all(tool["_meta"]["maiku/participant"] == descriptor.handle for tool in tools)
+
+        assert len(openai_tools.to_tools(descriptor)) == len(descriptor.affordances)
+
+        card = a2a.to_agent_card(descriptor)
+        assert len(card["skills"]) == len(descriptor.affordances)
