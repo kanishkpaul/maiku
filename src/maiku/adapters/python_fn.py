@@ -15,7 +15,7 @@ from typing import Any
 
 from maiku.adapters.base import Adapter, AdapterError, InvalidArguments, UnknownAffordance
 from maiku.adapters.context import CallContext
-from maiku.adapters.convert import collapse, to_part
+from maiku.adapters.convert import collapse, to_part, to_result
 from maiku.adapters.decorator import overrides_for
 from maiku.adapters.introspect import (
     context_params,
@@ -167,4 +167,5 @@ class PythonAdapter(Adapter):
                 yield Delta(part=to_part(item), index=index)
                 index += 1
 
-        yield Finished(result=collapse(chunks) if streaming else chunks[-1] if chunks else None)
+        raw = collapse(chunks) if streaming else chunks[-1] if chunks else None
+        yield Finished(result=await to_result(raw, ctx.artifacts))
