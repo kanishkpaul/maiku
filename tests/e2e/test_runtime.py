@@ -208,3 +208,34 @@ async def test_result_cleans_up_after_itself(workspace):
     async with workspace.session() as s:
         await s.result("test/sample", "tokens", {"text": "a b"})
         assert s.router._contexts == {}
+
+
+async def approve_all(request):
+    return True
+
+
+async def test_a_later_step_can_read_what_an_earlier_one_produced(workspace):
+    """A pipeline that cannot hand a file along is not a pipeline."""
+    async with workspace.session(responder=approve_all) as s:
+        digest = await s.result("test/effects", "render", {"text": "handed along"})
+        seen = await s.result("test/effects", "summarise", {"digest": digest})
+
+    assert seen == "read 1 granted artifact(s)"
+
+
+async def test_sharing_can_be_switched_off(workspace):
+    async with workspace.session(responder=approve_all, share_artifacts=False) as s:
+        digest = await s.result("test/effects", "render", {"text": "kept private"})
+        seen = await s.result("test/effects", "summarise", {"digest": digest})
+
+    assert seen == "read 0 granted artifact(s)"
+
+
+async def test_sessions_do_not_share_artifacts_with_each_other(workspace):
+    async with workspace.session(responder=approve_all) as first:
+        digest = await first.result("test/effects", "render", {"text": "mine"})
+
+    async with workspace.session(responder=approve_all) as second:
+        seen = await second.result("test/effects", "summarise", {"digest": digest})
+
+    assert seen == "read 0 granted artifact(s)"

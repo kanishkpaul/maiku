@@ -83,6 +83,7 @@ class Router:
         responder: Responder = deny_everything,
         observer: Observer | None = None,
         narrate: bool = True,
+        share_artifacts: bool = True,
         tracer: Any = None,
     ) -> None:
         self.registry = registry
@@ -92,8 +93,10 @@ class Router:
         self.responder = responder
         self.observer = observer
         self.narrate = narrate
+        self.share_artifacts = share_artifacts
         self.tracer = tracer or default_tracer()
         self.tasks: dict[str, Task] = {}
+        self.produced: set[str] = set()
         self._adapters: dict[str, Adapter] = {}
         self._contexts: dict[str, CallContext] = {}
 
@@ -236,11 +239,20 @@ class Router:
             emits the event is being helpful, and guarded() drops the duplicate.
             """
             produced.append(ref)
+            self.produced.add(ref.digest)
             ctx.emit(ArtifactWritten(ref=ref))
 
+        # A participant must be able to read what an earlier step in the same session
+        # produced, or a pipeline cannot hand a file along - which is most of what a
+        # pipeline is. The session is the sharing boundary; the grant still governs what
+        # may be *done*. Two different axes, deliberately.
         ctx.artifacts = ScopedArtifacts(
             self.store,
-            readable=call.readable | set(call.grant.artifacts),
+            readable=(
+                call.readable
+                | set(call.grant.artifacts)
+                | (self.produced if self.share_artifacts else set())
+            ),
             on_write=produced_artifact,
         )
         self._contexts[task.id] = ctx

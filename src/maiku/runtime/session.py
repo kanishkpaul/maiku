@@ -34,6 +34,7 @@ class Session:
         owner: str = "user",
         responder: Responder = deny_everything,
         observer: Observer | None = None,
+        share_artifacts: bool = True,
     ) -> None:
         self.workspace = workspace
         self.id = session_id or new_id("session")
@@ -48,6 +49,7 @@ class Session:
             session_id=self.id,
             responder=responder,
             observer=observer,
+            share_artifacts=share_artifacts,
         )
 
     @property
