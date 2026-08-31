@@ -122,3 +122,17 @@ async def test_mcp_survives_a_round_trip_through_maiku(adapter):
     # And the same participant now speaks a protocol MCP has no notion of.
     card = a2a.to_agent_card(descriptor, base_url="https://host/a2a")
     assert {s["id"] for s in card["skills"]} == set(tools)
+
+
+async def test_approval_policy_can_be_demanded_at_adapt_time():
+    from maiku.descriptor.enums import Approval
+
+    adapter = await open_participant(f"{SERVER}?approval=on_scope")
+    try:
+        assert (await adapter.describe()).permissions.approval is Approval.ON_SCOPE
+    finally:
+        await adapter.close()
+
+    assert (await (await open_participant(SERVER)).describe()).permissions.approval is (
+        Approval.NEVER
+    )

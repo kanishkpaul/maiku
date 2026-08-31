@@ -22,6 +22,7 @@ from maiku.descriptor.affordance import Affordance
 from maiku.descriptor.binding import Binding
 from maiku.descriptor.enums import (
     AffordanceKind,
+    Approval,
     Determinism,
     Kind,
     LatencyClass,
@@ -169,7 +170,11 @@ class MCPAdapter(Adapter):
                     (a.side_effects for a in affordances),
                     key=lambda e: list(SideEffect).index(e),
                     default=SideEffect.NONE,
-                )
+                ),
+                # An MCP server is usually someone else's code with a shell in it. Being
+                # able to say "ask me before anything destructive" at adapt time is the
+                # difference between using a third-party server and trusting one.
+                approval=Approval(self._uri.param("approval", Approval.NEVER.value)),
             ),
         )
 

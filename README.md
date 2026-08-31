@@ -45,8 +45,14 @@ maiku serve a2a                             # or as an A2A agent
 That last line is the point. Adapt a PyTorch model and Claude Code can call it — still as a
 model, not as a chatbot.
 
-See [`examples/triage`](examples/triage/README.md) for five participants collaborating on
-one task, including the moment the runtime refuses an over-reaching call.
+Two worked examples:
+
+- [`examples/real`](examples/real/README.md) — **no fixtures.** Gemma 4 running on
+  llama.cpp, a CNN trained here on MNIST to 98.2%, Anthropic's MCP filesystem server, and a
+  person. Gemma is handed the other two as tools, chains them, and the irreversible write
+  stops for human approval.
+- [`examples/triage`](examples/triage/README.md) — five participants on one task, including
+  the moment the runtime refuses an over-reaching call.
 
 ## The model
 
