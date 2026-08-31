@@ -1,0 +1,126 @@
+import json
+import sys
+
+import pytest
+from typer.testing import CliRunner
+
+from maiku.cli.main import app
+
+runner = CliRunner()
+SAMPLE = "python:tests.fixtures.sample_module"
+SERVER = f"mcp:{sys.executable} -u tests/fixtures/mcp_server.py"
+
+
+@pytest.fixture
+def home(tmp_path):
+    return ["--home", str(tmp_path / "home")]
+
+
+def run(*args):
+    result = runner.invoke(app, list(args))
+    return result
+
+
+@pytest.fixture
+def stocked(home):
+    assert run("add", SAMPLE, *home).exit_code == 0
+    return home
+
+
+def test_add_then_list(stocked):
+    listing = run("ls", *stocked)
+    assert listing.exit_code == 0
+    assert "test/sample" in listing.stdout
+    assert "in_process" in listing.stdout
+
+
+def test_add_with_handle_override(home):
+    assert run("add", SAMPLE, "--as", "mine/scorer", *home).exit_code == 0
+    assert "mine/scorer" in run("ls", *home).stdout
+
+
+def test_call_returns_a_result(stocked):
+    result = run("call", "test/sample", "fetch", "-a", "key=abc", *stocked)
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["value"] == "ABC"
+
+
+def test_call_streams_text(stocked):
+    result = run("call", "test/sample", "tokens", "-a", "text=a b", *stocked)
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "ab"
+
+
+def test_arguments_are_typed_where_they_parse(stocked):
+    assert run("call", "test/sample", "narrate", "-a", "count=2", *stocked).exit_code == 0
+    bad = run("call", "test/sample", "narrate", "-a", "count=lots", *stocked)
+    assert bad.exit_code == 1
+
+
+def test_json_arguments(stocked):
+    result = run("call", "test/sample", "fetch", "--json", '{"key": "z"}', *stocked)
+    assert json.loads(result.stdout)["key"] == "z"
+
+
+def test_malformed_argument_is_a_clean_error(stocked):
+    result = run("call", "test/sample", "fetch", "-a", "nokeyvalue", *stocked)
+    assert result.exit_code == 1
+
+
+def test_missing_participant_lists_what_is_known(stocked):
+    result = run("call", "nope/nope", "x", *stocked)
+    assert result.exit_code == 1
+    assert "test/sample" in result.output
+
+
+def test_adapting_something_absent_is_a_sentence_not_a_traceback(home):
+    result = run("add", "python:no.such.module", *home)
+    assert result.exit_code == 1
+    assert "Traceback" not in result.output
+    assert "cannot import" in result.output
+
+
+def test_unknown_scheme_is_reported(home):
+    result = run("add", "telepathy:brain", *home)
+    assert result.exit_code == 1
+    assert "no adapter for scheme" in result.output
+
+
+@pytest.mark.parametrize("fmt", ["maiku", "json", "mcp", "a2a", "openai"])
+def test_describe_projects_into_each_format(stocked, fmt):
+    result = run("describe", "test/sample", "--as", fmt, *stocked)
+    assert result.exit_code == 0
+    if fmt != "maiku":
+        assert json.loads(result.stdout)
+
+
+def test_describe_rejects_an_unknown_format(stocked):
+    assert run("describe", "test/sample", "--as", "xml", *stocked).exit_code == 1
+
+
+def test_find_searches_prose(stocked):
+    assert "test/sample" in run("find", "countdown", *stocked).stdout
+    assert "no participants" in run("find", "helicopter", *stocked).stdout
+
+
+def test_probe_reports_reachability(stocked):
+    result = run("probe", *stocked)
+    assert result.exit_code == 0
+    assert result.stdout.startswith("up")
+
+
+def test_rm(stocked):
+    assert run("rm", "test/sample", *stocked).exit_code == 0
+    assert run("rm", "test/sample", *stocked).exit_code == 1
+
+
+def test_schemes_lists_what_this_build_can_adapt():
+    result = run("schemes")
+    assert {"python", "mcp", "human", "ollama"} <= set(result.stdout.split())
+
+
+def test_an_mcp_server_survives_the_whole_cli_path(home):
+    assert run("add", SERVER, *home).exit_code == 0
+    result = run("call", "mcp/fixture", "read_file", "-a", "path=x.md", *home)
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "contents of x.md"

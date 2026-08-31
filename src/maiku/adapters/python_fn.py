@@ -8,7 +8,9 @@ multi-affordance participant, which is usually what people actually mean when th
 import asyncio
 import importlib
 import inspect
+import sys
 from collections.abc import AsyncIterator, Callable
+from pathlib import Path
 from typing import Any
 
 from maiku.adapters.base import Adapter, AdapterError, InvalidArguments, UnknownAffordance
@@ -42,6 +44,12 @@ def import_target(target: str) -> tuple[Any, str]:
     module_path, _, attr_path = target.partition(":")
     if not module_path:
         raise InvalidURI(f"python target {target!r} has no module")
+
+    # Someone standing in their project root expects their own modules to import. The
+    # installed console script does not put cwd on the path, so put it there.
+    cwd = str(Path.cwd())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
 
     try:
         obj: Any = importlib.import_module(module_path)

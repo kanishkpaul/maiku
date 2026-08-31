@@ -1158,6 +1158,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+    { name = "typer" },
 ]
 
 [package.metadata]
@@ -1181,6 +1182,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.8" },
+    { name = "typer", specifier = ">=0.15" },
 ]
 
 [[package]]
