@@ -11,3 +11,4 @@ data/
 *.sqlite
 *.sqlite3
 examples/real/data/
+package-lock.json
