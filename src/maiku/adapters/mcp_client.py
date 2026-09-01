@@ -61,7 +61,7 @@ def side_effect_from(annotations: dict[str, Any]) -> SideEffect:
     return SideEffect.WRITE
 
 
-def _affordance(tool: dict[str, Any]) -> Affordance:
+def to_affordance(tool: dict[str, Any]) -> Affordance:
     annotations = tool.get("annotations") or {}
     name = str(tool["name"]).lower().replace("-", "_").replace(".", "_")
     return Affordance(
@@ -124,13 +124,13 @@ class MCPAdapter(Adapter):
 
     def _tool_for(self, affordance: str) -> dict[str, Any]:
         for tool in self._tools.values():
-            if _affordance(tool).name == affordance:
+            if to_affordance(tool).name == affordance:
                 return tool
         raise UnknownAffordance(f"{affordance!r} is not a tool on {self._name}")
 
     async def describe(self) -> ParticipantDescriptor:
         await self._connect()
-        affordances = [_affordance(tool) for tool in self._tools.values()]
+        affordances = [to_affordance(tool) for tool in self._tools.values()]
         return ParticipantDescriptor(
             handle=f"mcp/{self._name.lower().replace(' ', '-')}",
             kind=Kind.TOOL,
