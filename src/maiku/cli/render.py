@@ -73,6 +73,13 @@ def detail(descriptor: ParticipantDescriptor) -> str:
         if properties:
             shown = ", ".join(f"{p}{'*' if p in required else ''}" for p in properties)
             lines.append(f"    {'':<20} in: {shown}")
+
+    # One participant may be reachable several ways; discovery makes that ordinary.
+    lines += ["", "  bindings"]
+    for binding in descriptor.bindings:
+        serves = ", ".join(binding.affordances) or "all"
+        lines.append(f"    {binding.scheme:<20} {binding.uri or binding.transport.value}")
+        lines.append(f"    {'':<20} serves: {serves}")
     return "\n".join(lines)
 
 
