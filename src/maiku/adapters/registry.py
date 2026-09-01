@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 BUILTIN_SCHEMES: dict[str, str] = {
     "a2a": "maiku.adapters.a2a_client",
+    "auto": "maiku.discovery.adapter",
     "cli": "maiku.adapters.cli_tool",
     "hf": "maiku.adapters.hf_pipeline",
     "http": "maiku.adapters.http_api",
@@ -52,6 +53,38 @@ def resolve(uri: ParticipantURI) -> type["Adapter"]:
         ) from None
 
 
+def coerce(raw: str) -> ParticipantURI:
+    """Explicit `auto:` first, bare addresses only as sugar on top.
+
+    Keeping the explicit form primary is what keeps `maiku add` honest: a mistyped scheme
+    should say it is unknown, not quietly turn into a network address and fail later with
+    a discovery error about a host that was never meant to be one.
+    """
+    try:
+        uri = ParticipantURI.parse(raw)
+    except InvalidURI:
+        return _as_auto(raw)
+    return uri if uri.scheme in known_schemes() else _as_auto(raw)
+
+
+def looks_like_an_address(raw: str) -> bool:
+    if "://" in raw:
+        return True
+    host, _, port = raw.partition(":")
+    if port and not port.isdigit():
+        return False
+    return "." in host or host == "localhost"
+
+
+def _as_auto(raw: str) -> ParticipantURI:
+    if not looks_like_an_address(raw):
+        scheme = raw.partition(":")[0]
+        raise InvalidURI(
+            f"no adapter for scheme {scheme!r}; known: {', '.join(known_schemes())}"
+        )
+    return ParticipantURI.parse(f"auto:{raw}")
+
+
 async def open_participant(raw: str | ParticipantURI) -> "Adapter":
-    uri = ParticipantURI.parse(raw) if isinstance(raw, str) else raw
+    uri = coerce(raw) if isinstance(raw, str) else raw
     return await resolve(uri).open(uri)
