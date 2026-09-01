@@ -7,6 +7,10 @@ a vendor all leave the same participant, while adding an affordance mints a new 
 
 The handle stays inside because it is a position rather than a label: two people who both
 afford only `approve` are genuinely different participants.
+
+Which leaves a second question the id cannot answer: what else affords exactly this, under
+another name? `capability_id` takes the handle out too. `id` says which participant this
+is; `capability_id` says what it is one of.
 """
 
 import hashlib
@@ -28,7 +32,10 @@ VOLATILE_FIELDS = frozenset(
     }
 )
 
+POSITION_FIELDS = frozenset({"handle"})  # where it sits in the graph, not what it affords
+
 ID_PREFIX = "mk:"
+CAPABILITY_PREFIX = "cap:"
 ID_LENGTH = 32
 
 
@@ -47,12 +54,26 @@ def identity_view(descriptor: "ParticipantDescriptor") -> dict[str, Any]:
     return descriptor.model_dump(mode="json", exclude=set(VOLATILE_FIELDS))
 
 
+def capability_view(descriptor: "ParticipantDescriptor") -> dict[str, Any]:
+    return descriptor.model_dump(mode="json", exclude=set(VOLATILE_FIELDS | POSITION_FIELDS))
+
+
 def content_hash(descriptor: "ParticipantDescriptor") -> str:
     return hashlib.sha256(canonical_json(identity_view(descriptor))).hexdigest()
 
 
 def content_id(descriptor: "ParticipantDescriptor") -> str:
     return ID_PREFIX + content_hash(descriptor)[:ID_LENGTH]
+
+
+def capability_id(descriptor: "ParticipantDescriptor") -> str:
+    """Distinct prefix on purpose: the two ids answer different questions.
+
+    A capability id handed to a lookup expecting an identity id must miss loudly rather
+    than quietly return nothing.
+    """
+    digest = hashlib.sha256(canonical_json(capability_view(descriptor))).hexdigest()
+    return CAPABILITY_PREFIX + digest[:ID_LENGTH]
 
 
 def signing_payload(descriptor: "ParticipantDescriptor") -> bytes:

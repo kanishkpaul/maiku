@@ -24,6 +24,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS participants (
     handle      TEXT PRIMARY KEY,
     content_id  TEXT NOT NULL,
+    capability_id TEXT NOT NULL DEFAULT '',
     uri         TEXT NOT NULL,
     kind        TEXT NOT NULL,
     descriptor  TEXT NOT NULL,
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS participants (
 );
 CREATE INDEX IF NOT EXISTS participants_kind ON participants(kind);
 CREATE INDEX IF NOT EXISTS participants_content ON participants(content_id);
+CREATE INDEX IF NOT EXISTS participants_capability ON participants(capability_id);
 """
 
 FTS_SCHEMA = """
@@ -115,9 +117,30 @@ class Registry:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
+        self._migrate()
         self._db.executescript(SCHEMA)
         self._fts = self._try_fts()
         self._db.commit()
+
+    def _migrate(self) -> None:
+        """Bring a registry written before capability ids up to the current columns.
+
+        Backfilled from the stored descriptor rather than left empty, so an existing home
+        answers `by_capability_id` correctly instead of answering it with silence.
+        """
+        columns = {row["name"] for row in self._db.execute("PRAGMA table_info(participants)")}
+        if not columns or "capability_id" in columns:
+            return
+
+        self._db.execute(
+            "ALTER TABLE participants ADD COLUMN capability_id TEXT NOT NULL DEFAULT ''"
+        )
+        for row in self._db.execute("SELECT handle, descriptor FROM participants").fetchall():
+            descriptor = ParticipantDescriptor.model_validate_json(row["descriptor"])
+            self._db.execute(
+                "UPDATE participants SET capability_id = ? WHERE handle = ?",
+                (descriptor.capability_id, row["handle"]),
+            )
 
     def _try_fts(self) -> bool:
         try:
@@ -146,10 +169,12 @@ class Registry:
         self._db.execute(
             """
             INSERT INTO participants
-                (handle, content_id, uri, kind, descriptor, health, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+                (handle, content_id, capability_id, uri, kind,
+                 descriptor, health, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
             ON CONFLICT(handle) DO UPDATE SET
-                content_id = excluded.content_id,
+                content_id    = excluded.content_id,
+                capability_id = excluded.capability_id,
                 uri        = excluded.uri,
                 kind       = excluded.kind,
                 descriptor = excluded.descriptor,
@@ -158,6 +183,7 @@ class Registry:
             (
                 descriptor.handle,
                 descriptor.id,
+                descriptor.capability_id,
                 uri,
                 descriptor.kind.value,
                 descriptor.model_dump_json(),
@@ -202,6 +228,18 @@ class Registry:
         """
         rows = self._db.execute(
             "SELECT * FROM participants WHERE content_id = ? ORDER BY handle", (content_id,)
+        )
+        return [self._entry(row) for row in rows]
+
+    def by_capability_id(self, capability_id: str) -> list[Entry]:
+        """Every handle affording exactly this, whatever it is called.
+
+        `by_content_id` asks "do I already hold this participant"; this asks "what else is
+        the same thing wearing another name" — the question two handles make possible.
+        """
+        rows = self._db.execute(
+            "SELECT * FROM participants WHERE capability_id = ? ORDER BY handle",
+            (capability_id,),
         )
         return [self._entry(row) for row in rows]
 

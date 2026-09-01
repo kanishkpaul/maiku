@@ -195,6 +195,17 @@ class ParticipantDescriptor(BaseModel):
 
         return content_id(self)
 
+    @property
+    def capability_id(self) -> str:
+        """What this affords, with the handle taken out.
+
+        Never serialized: it is derivable from the document, and a second id on the wire
+        would be a second thing to keep honest.
+        """
+        from maiku.descriptor.canonical import capability_id
+
+        return capability_id(self)
+
     def affordance(self, name: str) -> Affordance:
         for a in self.affordances:
             if a.name == name:

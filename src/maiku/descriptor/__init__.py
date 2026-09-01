@@ -1,6 +1,12 @@
 from maiku.descriptor.affordance import Affordance, Example
 from maiku.descriptor.binding import AuthRef, Binding
-from maiku.descriptor.canonical import canonical_json, content_hash, content_id, signing_payload
+from maiku.descriptor.canonical import (
+    canonical_json,
+    capability_id,
+    content_hash,
+    content_id,
+    signing_payload,
+)
 from maiku.descriptor.enums import (
     AffordanceKind,
     Approval,
@@ -60,6 +66,7 @@ __all__ = [
     "Signature",
     "Transport",
     "canonical_json",
+    "capability_id",
     "content_hash",
     "content_id",
     "max_side_effect",

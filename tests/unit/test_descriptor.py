@@ -81,6 +81,39 @@ def test_id_tracks_a_widened_input_schema(descriptor):
     assert make_descriptor(affordances=[widened]).id != descriptor.id
 
 
+def test_capability_id_is_shared_by_two_positions():
+    """The question `id` deliberately cannot answer: what else affords exactly this."""
+    alice = make_descriptor(handle="human/alice")
+    bob = make_descriptor(handle="human/bob")
+    assert alice.id != bob.id
+    assert alice.capability_id == bob.capability_id
+
+
+def test_capability_id_is_prefixed_apart_from_the_identity_id(descriptor):
+    assert descriptor.capability_id.startswith("cap:")
+    assert descriptor.capability_id[4:] != descriptor.id[3:]
+
+
+def test_capability_id_ignores_everything_identity_ignores(descriptor):
+    named = descriptor.display.model_dump()
+    dressed = make_descriptor(
+        display=Display(**named | {"name": "Feelings", "tags": ["nlp"]}),
+        bindings=[served_at("http://127.0.0.1:11435/v1")],
+    )
+    assert dressed.capability_id == descriptor.capability_id
+
+
+def test_capability_id_tracks_the_affordance_set(descriptor):
+    grown = make_descriptor(
+        affordances=[*descriptor.affordances, Affordance(name="explain", summary="Explain it")]
+    )
+    assert grown.capability_id != descriptor.capability_id
+
+
+def test_capability_id_stays_off_the_wire(descriptor):
+    assert "capability_id" not in descriptor.model_dump(mode="json")
+
+
 def test_declared_id_survives_an_edit_outside_identity(descriptor):
     payload = descriptor.model_dump(mode="json")
     payload["display"]["name"] = "Feelings"

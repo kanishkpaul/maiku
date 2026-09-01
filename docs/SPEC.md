@@ -23,6 +23,15 @@ A serialized descriptor carries its `id`. Reading one back verifies it, so a loa
 edit to what the participant can do. Edits to where it is reached fall outside that check by
 design; `signing_payload` covers them for anyone who signs.
 
+## Capability id
+
+`capability_id` is `cap:` plus the same hash taken with `handle` excluded as well. `id` says
+which participant this is; `capability_id` says what it is one of, so `human/alice` and
+`human/bob` — two different participants who both afford only `approve` — share one.
+
+It is derived on demand and never serialized: a second id on the wire would be a second thing
+to keep honest. The registry stores it to answer `by_capability_id`.
+
 ## Fields
 
 | Field | Answers |

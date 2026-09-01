@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from maiku.descriptor import Affordance, Binding, Transport
@@ -64,6 +66,44 @@ def test_by_content_id_finds_the_stored_capability_set(registry, descriptor):
     registry.add(descriptor, "u")
     assert [e.handle for e in registry.by_content_id(descriptor.id)] == [descriptor.handle]
     assert registry.by_content_id("mk:" + "0" * 32) == []
+
+
+def test_by_capability_id_finds_every_handle_affording_the_same_thing(registry):
+    alice = make_descriptor(handle="human/alice")
+    bob = make_descriptor(handle="human/bob")
+    registry.add(alice, "human:alice")
+    registry.add(bob, "human:bob")
+
+    assert alice.capability_id == bob.capability_id
+    found = registry.by_capability_id(alice.capability_id)
+    assert [e.handle for e in found] == ["human/alice", "human/bob"]
+    assert registry.by_content_id(alice.id) == found[:1]
+
+
+REGISTRY_BEFORE_CAPABILITY_IDS = """
+CREATE TABLE participants (
+    handle TEXT PRIMARY KEY, content_id TEXT NOT NULL, uri TEXT NOT NULL,
+    kind TEXT NOT NULL, descriptor TEXT NOT NULL, health TEXT,
+    first_seen REAL NOT NULL, last_seen REAL NOT NULL
+);
+"""
+
+
+def test_an_existing_registry_is_backfilled_not_left_blank(tmp_path, descriptor):
+    path = tmp_path / "old.sqlite"
+    old = sqlite3.connect(path)
+    old.executescript(REGISTRY_BEFORE_CAPABILITY_IDS)
+    old.execute(
+        "INSERT INTO participants VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+        (descriptor.handle, descriptor.id, "u", descriptor.kind.value,
+         descriptor.model_dump_json(), 1.0, 1.0),
+    )
+    old.commit()
+    old.close()
+
+    with Registry(path) as registry:
+        found = registry.by_capability_id(descriptor.capability_id)
+        assert [e.handle for e in found] == [descriptor.handle]
 
 
 def test_an_update_rebuilds_the_search_index_rather_than_duplicating_it(registry, descriptor):
