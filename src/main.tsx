@@ -1,199 +1,165 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type ParticipantKind = "model" | "tool" | "pipeline" | "human";
 type Participant = {
-  id: string;
-  name: string;
-  kind: ParticipantKind;
+  key: string;
+  title: string;
+  category: string;
   description: string;
+  handle: string;
+  added: boolean;
+  online: boolean;
   affordances: string[];
-  status: "ready" | "waiting" | "needs-you";
-  color: "lime" | "sky" | "coral" | "cream";
+  health: string | null;
 };
 
-type EventItem = { time: string; kind: "started" | "artifact" | "delegate" | "approval" | "finished"; text: string };
-
-const initialParticipants: Participant[] = [
-  {
-    id: "cassia",
-    name: "cassia",
-    kind: "model",
-    description: "A local language model that can reason and stream text.",
-    affordances: ["stream: respond", "invoke: plan", "delegate"],
-    status: "ready",
-    color: "lime",
-  },
-  {
-    id: "digits",
-    name: "digits",
-    kind: "pipeline",
-    description: "A vision pipeline that classifies an image without becoming a chatbot.",
-    affordances: ["invoke: classify", "artifact input", "tensor output"],
-    status: "ready",
-    color: "sky",
-  },
-  {
-    id: "files",
-    name: "files",
-    kind: "tool",
-    description: "An MCP filesystem server with scoped read and write affordances.",
-    affordances: ["invoke: read", "invoke: write", "artifact access"],
-    status: "ready",
-    color: "cream",
-  },
-  {
-    id: "you",
-    name: "you",
-    kind: "human",
-    description: "A first-class participant who can answer, choose, and approve.",
-    affordances: ["ask", "choose", "approve"],
-    status: "needs-you",
-    color: "coral",
-  },
-];
-
-const initialEvents: EventItem[] = [
-  { time: "now", kind: "started", text: "The shared session is ready. Nothing is running yet." },
-  { time: "—", kind: "delegate", text: "Participants can only use the affordances you grant." },
-];
-
-const candidates: Record<ParticipantKind, Omit<Participant, "id" | "status">> = {
-  model: { name: "new model", kind: "model", description: "An OpenAI-compatible or local model.", affordances: ["stream: respond", "invoke: tool call"], color: "lime" },
-  tool: { name: "new tool", kind: "tool", description: "A service, MCP server, API, or command-line tool.", affordances: ["invoke: action", "event"], color: "cream" },
-  pipeline: { name: "new pipeline", kind: "pipeline", description: "A model, function, notebook, or specialised pipeline.", affordances: ["invoke: process", "artifact input"], color: "sky" },
-  human: { name: "a person", kind: "human", description: "A person who can answer, choose, and approve at human latency.", affordances: ["ask", "choose", "approve"], color: "coral" },
+type Request = {
+  id: string;
+  kind: "choose" | "approval" | "input";
+  prompt: string;
+  detail: { options?: string[]; detail?: unknown; schema?: unknown };
 };
 
-function Icon({ name, size = 18 }: { name: string; size?: number }) {
-  const paths: Record<string, React.ReactNode> = {
-    plus: <><path d="M12 5v14M5 12h14" /></>,
-    spark: <><path d="m12 2 1.8 7.1L21 11l-7.2 1.9L12 20l-1.8-7.1L3 11l7.2-1.9L12 2Z" /></>,
-    brain: <><path d="M9 4a3 3 0 0 0-5 2.2A3.3 3.3 0 0 0 5 12.5 3.2 3.2 0 0 0 9 17.7V20m6-16a3 3 0 0 1 5 2.2 3.3 3.3 0 0 1-1 6.3 3.2 3.2 0 0 1-4 5.2V20M9 8c1.2 0 2 .8 3 2.2C13 8.8 13.8 8 15 8m-6 6c1.2 0 2-.8 3-2.2 1 1.4 1.8 2.2 3 2.2" /></>,
-    eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
-    file: <><path d="M6 3h8l4 4v14H6V3Z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>,
+type Snapshot = {
+  participants: Participant[];
+  ready: boolean;
+  running: boolean;
+  pending: Request | null;
+  pace: number;
+  reportPath: string;
+};
+
+type Log = { id: string; at: number; kind: string; message: string; participant?: string; detail?: string };
+type Tab = "participants" | "case" | "log" | "human";
+
+const empty: Snapshot = { participants: [], ready: false, running: false, pending: null, pace: 11, reportPath: "" };
+
+function Icon({ name }: { name: "spark" | "plus" | "play" | "pulse" | "person" | "shield" | "arrow" | "terminal" }) {
+  const shape: Record<string, React.ReactNode> = {
+    spark: <path d="m12 2 1.8 7.2L21 11l-7.2 1.9L12 20l-1.8-7.1L3 11l7.2-1.8L12 2Z" />,
+    plus: <path d="M12 5v14M5 12h14" />,
+    play: <path d="m8 5 11 7-11 7V5Z" />,
+    pulse: <path d="M3 12h4l2.1-5 4 10 2-5H21" />,
     person: <><circle cx="12" cy="7" r="3.2" /><path d="M5.5 21c.7-4 3-6 6.5-6s5.8 2 6.5 6" /></>,
-    play: <><path d="m8 5 11 7-11 7V5Z" /></>,
     shield: <><path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
-    branch: <><path d="M6 3v13a3 3 0 0 0 3 3h9" /><circle cx="6" cy="3" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 9h12a3 3 0 0 1 3 3v1" /><circle cx="21" cy="13" r="2" /></>,
-    arrow: <><path d="M5 12h14m-5-5 5 5-5 5" /></>,
-    close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
+    terminal: <><path d="m5 7 4 4-4 4M12 17h7" /></>,
   };
-  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{shape[name]}</svg>;
 }
 
-function ParticipantGlyph({ kind }: { kind: ParticipantKind }) {
-  return <span className={`participant-glyph ${kind}`}><Icon name={kind === "model" ? "brain" : kind === "pipeline" ? "eye" : kind === "tool" ? "file" : "person"} size={25} /></span>;
+async function api<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<T>;
 }
 
 function App() {
-  const [participants, setParticipants] = useState(initialParticipants);
-  const [selectedId, setSelectedId] = useState("cassia");
-  const [events, setEvents] = useState(initialEvents);
-  const [runState, setRunState] = useState<"idle" | "running" | "approval" | "finished">("idle");
-  const [showAdd, setShowAdd] = useState(false);
-  const [addingKind, setAddingKind] = useState<ParticipantKind>("model");
+  const [snapshot, setSnapshot] = useState<Snapshot>(empty);
+  const [tab, setTab] = useState<Tab>("participants");
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const selected = useMemo(() => participants.find((item) => item.id === selectedId) ?? participants[0], [participants, selectedId]);
+  const addedCount = snapshot.participants.filter((participant) => participant.added).length;
+  const human = snapshot.participants.find((participant) => participant.key === "human");
+  const nonHumansReady = snapshot.participants.filter((participant) => participant.key !== "human").every((participant) => participant.added && participant.online);
 
-  function runDemo() {
-    if (runState === "running") return;
-    setRunState("running");
-    setEvents([
-      { time: "now", kind: "started", text: "cassia started a triage task in the shared session." },
-      { time: "+01", kind: "artifact", text: "digits classified the image and wrote an artifact reference." },
-      { time: "+02", kind: "delegate", text: "cassia requested scoped access to files/write." },
-    ]);
-    window.setTimeout(() => {
-      setRunState("approval");
-      setSelectedId("you");
-      setEvents((current) => [...current, { time: "+03", kind: "approval", text: "Writing the report is irreversible. Your approval is required." }]);
-    }, 850);
+  const appendLog = (log: Log) => setLogs((items) => [log, ...items].slice(0, 120));
+  const refresh = async () => setSnapshot(await api<Snapshot>("/api/status"));
+
+  useEffect(() => {
+    refresh().catch((reason: Error) => setError(`Control room unavailable: ${reason.message}`));
+    const stream = new EventSource("/events");
+    stream.onmessage = (message) => {
+      const event = JSON.parse(message.data) as Log & { snapshot?: Snapshot; request?: Request };
+      if (event.snapshot) setSnapshot(event.snapshot);
+      if (event.request) setSnapshot((current) => ({ ...current, pending: event.request! }));
+      appendLog(event);
+    };
+    stream.onerror = () => setError("Live event stream disconnected. Is the demo command still running?");
+    return () => stream.close();
+  }, []);
+
+  async function action(label: string, request: () => Promise<Snapshot | { accepted: boolean }>, nextTab?: Tab) {
+    setBusy(label);
+    setError(null);
+    try {
+      const response = await request();
+      if ("participants" in response) setSnapshot(response);
+      else await refresh();
+      if (nextTab) setTab(nextTab);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message.replace(/^"|"$/g, "") : "The action failed.");
+    } finally {
+      setBusy(null);
+    }
   }
 
-  function approve() {
-    setRunState("finished");
-    setEvents((current) => [...current, { time: "+04", kind: "finished", text: "You approved the report. files wrote it and the session finished." }]);
+  function addParticipant(key: string) {
+    return action(`add:${key}`, () => api<Snapshot>(`/api/participants/${key}`, { method: "POST" }));
   }
 
-  function addParticipant() {
-    const candidate = candidates[addingKind];
-    const id = `${addingKind}-${participants.length + 1}`;
-    const participant: Participant = { ...candidate, id, status: addingKind === "human" ? "needs-you" : "ready" };
-    setParticipants((current) => [...current, participant]);
-    setSelectedId(id);
-    setEvents((current) => [...current, { time: "now", kind: "started", text: `${candidate.name} joined this demonstration session.` }]);
-    setShowAdd(false);
+  function answer(value: string | boolean) {
+    const request = snapshot.pending;
+    if (!request) return;
+    return action("human", () => api<{ accepted: boolean }>("/api/human-response", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: request.id, value }) }));
   }
+
+  const statusText = useMemo(() => {
+    if (snapshot.running) return snapshot.pending ? "waiting on a human" : "case is running";
+    if (snapshot.ready) return "ready to run";
+    return `${addedCount} of 6 participants present`;
+  }, [addedCount, snapshot.pending, snapshot.ready, snapshot.running]);
 
   return <main className="app-shell">
     <header className="topbar">
-      <a className="brand" href="#top" aria-label="maiku demo home"><span className="brand-mark"><Icon name="spark" size={18} /></span>maiku</a>
-      <div className="session-label"><span className="pulse" />Signal Garden <span>interactive demo</span></div>
-      <button className="quiet-button" onClick={() => setShowAdd(true)}><Icon name="plus" />Add anything</button>
+      <div className="brand"><span className="brand-mark"><Icon name="spark" /></span>maiku</div>
+      <div className="statusline"><i className={error ? "down" : "up"} />live local runtime <span>·</span> {statusText}</div>
+      <button className="quick-button" disabled={busy !== null || nonHumansReady} onClick={() => action("quick", () => api<Snapshot>("/api/quick-load", { method: "POST" }))}><Icon name="plus" />{busy === "quick" ? "loading…" : "quick-load 5"}</button>
     </header>
 
-    <section className="intro" id="top">
-      <div>
-        <p className="statement">Anything intelligent can work with everything else.</p>
-        <p className="substatement">This is one shared Maiku session. Each participant keeps its own nature; you decide what may happen.</p>
-      </div>
-      <button className={`run-button ${runState === "running" ? "is-running" : ""}`} onClick={runDemo} disabled={runState === "running"}>
-        <Icon name={runState === "finished" ? "shield" : "play"} />
-        {runState === "idle" ? "Run the session" : runState === "running" ? "Following the trace" : runState === "approval" ? "Waiting for you" : "Run it again"}
-      </button>
+    <section className="hero">
+      <div><span className="eyebrow">A two-minute live constellation</span><h1>Bring different kinds of intelligence into one working room.</h1><p>This is a local product demo: the cards add real Maiku participants, the event stream is live, and you are the human boundary.</p></div>
+      <div className="run-card"><span>Prepared case</span><b>Loading-bay evidence review</b><small>11 visible stages · artifacts · a human-gated report write</small><button disabled={!snapshot.ready || snapshot.running || busy !== null} onClick={() => action("run", () => api<Snapshot>("/api/run", { method: "POST" }), "case")}><Icon name="play" />{snapshot.running ? "case in progress" : "run live case"}</button></div>
     </section>
 
-    <section className="workspace" aria-label="Maiku demonstration workspace">
-      <aside className="participants-panel">
-        <div className="panel-heading"><span>In this session</span><strong>{participants.length}</strong></div>
-        <div className="participant-list">
-          {participants.map((participant) => <button key={participant.id} className={`participant-row ${selectedId === participant.id ? "selected" : ""}`} onClick={() => setSelectedId(participant.id)}>
-            <ParticipantGlyph kind={participant.kind} />
-            <span><b>{participant.name}</b><small>{participant.kind}</small></span>
-            <i className={`status-dot ${participant.status}`} />
-          </button>)}
-        </div>
-        <button className="add-row" onClick={() => setShowAdd(true)}><Icon name="plus" />Bring in something else</button>
-        <div className="truth-note"><Icon name="shield" size={16} /><span>Participants see only the capabilities and artifacts you grant.</span></div>
-      </aside>
+    {error && <div className="error-banner"><b>Attention:</b> {error}<button onClick={() => setError(null)}>dismiss</button></div>}
 
-      <section className="garden" aria-label="Connected participant map">
-        <div className="garden-topline"><span className="map-caption">shared runtime</span><span>click a participant to inspect it</span></div>
-        <div className="constellation" aria-label="Participants connected through a shared session">
-          <svg className="signal-lines" viewBox="0 0 680 450" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M340 218 L340 66 M340 218 L558 218 M340 218 L340 378 M340 218 L122 218" />
-            <path className="outer" d="M340 66 C470 75 550 128 558 218 C550 310 470 365 340 378 C210 365 130 310 122 218 C130 128 210 75 340 66Z" />
-          </svg>
-          <button className="task-seed" onClick={runDemo}><span>shared task</span><b>{runState === "idle" ? "frame triage" : runState === "approval" ? "needs approval" : runState === "finished" ? "report saved" : "in progress"}</b><small>one trace · four native kinds</small></button>
-          {participants.slice(0, 4).map((participant, index) => <button key={participant.id} className={`orbit-node node-${index} ${selectedId === participant.id ? "active" : ""} ${participant.color}`} onClick={() => setSelectedId(participant.id)}>
-            <ParticipantGlyph kind={participant.kind} /><span>{participant.name}</span><i className={`status-dot ${participant.status}`} />
-          </button>)}
-        </div>
-        <div className="garden-footer"><span><i className="legend-dot lime" />can run</span><span><i className="legend-dot coral" />requires you</span><span><i className="legend-dot sky" />artifact-aware</span></div>
-      </section>
+    <nav className="tabs" aria-label="Demo areas">
+      {([ ["participants", "01 Participants"], ["case", "02 Live case"], ["log", "03 Event log"], ["human", "04 Human desk"] ] as [Tab, string][]).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}{key === "human" && snapshot.pending && <i />}</button>)}
+    </nav>
 
-      <aside className="inspector" aria-label="Selected participant details">
-        <div className="inspector-title"><span>Participant</span><button aria-label="Close inspector" className="icon-button"><Icon name="close" /></button></div>
-        <div className="selected-summary"><ParticipantGlyph kind={selected.kind} /><div><h2>{selected.name}</h2><p>{selected.kind} · {selected.status === "needs-you" ? "waiting on you" : "ready"}</p></div></div>
-        <p className="description">{selected.description}</p>
-        <div className="detail-group"><h3>Native affordances</h3>{selected.affordances.map((affordance) => <span className="affordance" key={affordance}>{affordance}</span>)}</div>
-        <div className="detail-group"><h3>Current grant</h3><div className="grant"><Icon name="shield" size={16} /><span>{selected.kind === "human" ? "ask · choose · approve" : "read artifacts · invoke listed affordances"}</span></div></div>
-        {runState === "approval" && selected.kind === "human" && <div className="approval-card"><span>Irreversible action</span><p>Allow <b>files/write</b> to save the incident report?</p><div><button className="approve" onClick={approve}>Approve write</button><button className="decline" onClick={() => setRunState("idle")}>Decline</button></div></div>}
-        {runState === "finished" && <div className="completed-note"><Icon name="shield" size={16} />Approval recorded in the same event stream.</div>}
-      </aside>
+    <section className="workspace">
+      {tab === "participants" && <Participants participants={snapshot.participants} busy={busy} onAdd={addParticipant} onQuick={() => action("quick", () => api<Snapshot>("/api/quick-load", { method: "POST" }))} />}
+      {tab === "case" && <Case snapshot={snapshot} onRun={() => action("run", () => api<Snapshot>("/api/run", { method: "POST" }))} busy={busy} />}
+      {tab === "log" && <LogView logs={logs} />}
+      {tab === "human" && <HumanDesk request={snapshot.pending} human={human} busy={busy} onAdd={() => addParticipant("human")} onAnswer={answer} />}
     </section>
 
-    <section className="trace-panel" aria-label="Live session trace">
-      <div className="trace-heading"><div><span>One event stream</span><h2>What happened, in a form every participant can share.</h2></div><button onClick={() => setEvents(initialEvents)} className="reset-button">Reset trace</button></div>
-      <div className="event-list">{events.map((event, index) => <article className={`event ${event.kind}`} key={`${event.time}-${index}`}><time>{event.time}</time><span className="event-symbol"><Icon name={event.kind === "artifact" ? "file" : event.kind === "approval" ? "person" : event.kind === "delegate" ? "branch" : event.kind === "finished" ? "shield" : "spark"} size={16} /></span><p>{event.text}</p><span className="event-kind">{event.kind.replace("_", " ")}</span></article>)}</div>
-    </section>
-
-    <section className="explain-strip"><div><span>Not a chat wrapper</span><p>A classifier stays a classifier. A human stays a human. Maiku makes the capability between them legible.</p></div><button onClick={() => setShowAdd(true)}>Explore another participant <Icon name="arrow" /></button></section>
-
-    {showAdd && <div className="modal-backdrop" role="presentation"><section className="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-title"><button className="modal-close" onClick={() => setShowAdd(false)} aria-label="Close add participant"><Icon name="close" /></button><span className="modal-overline">Add anything intelligent</span><h2 id="add-title">What is joining the room?</h2><p>Choose its native shape. In a full Maiku runtime, an adapter derives its descriptor from the thing itself.</p><div className="kind-picker">{(Object.keys(candidates) as ParticipantKind[]).map((kind) => <button key={kind} className={addingKind === kind ? "picked" : ""} onClick={() => setAddingKind(kind)}><ParticipantGlyph kind={kind} /><span><b>{kind}</b><small>{candidates[kind].affordances[0]}</small></span></button>)}</div><div className="modal-action"><div><b>{candidates[addingKind].name}</b><span>{candidates[addingKind].description}</span></div><button className="approve" onClick={addParticipant}>Add to demo <Icon name="arrow" /></button></div></section></div>}
+    <footer><Icon name="terminal" /> The demo runs only on this machine. Its report, if approved, lands at <code>{snapshot.reportPath || ".maiku-live-demo/casebook/reports/evidence-report.md"}</code>.</footer>
   </main>;
+}
+
+function Participants({ participants, busy, onAdd, onQuick }: { participants: Participant[]; busy: string | null; onAdd: (key: string) => void; onQuick: () => void }) {
+  return <><div className="section-heading"><div><span>Participant staging</span><h2>Add the room in public, one native capability at a time.</h2></div><button className="outline" disabled={busy !== null} onClick={onQuick}>autoload the prepared five <Icon name="arrow" /></button></div><div className="participant-grid">{participants.map((participant, index) => <article className={`participant-card ${participant.added ? (participant.online ? "online" : "offline") : "empty"}`} key={participant.key}><div className="card-top"><span>0{index + 1}</span><i>{participant.category}</i></div><h3>{participant.title}</h3><p>{participant.description}</p><div className="handle">{participant.handle}</div>{participant.added ? <div className="connection"><i />{participant.online ? "adapted + healthy" : `added, probe says ${participant.health || "offline"}`}</div> : <button disabled={busy !== null} onClick={() => onAdd(participant.key)}><Icon name="plus" />{busy === `add:${participant.key}` ? "adding…" : `add ${participant.title}`}</button>}<div className="chips">{participant.affordances.length ? participant.affordances.map((item) => <span key={item}>{item}</span>) : <span>adapts on add</span>}</div></article>)}</div><p className="tip"><Icon name="pulse" />Individual add uses the same local adapter/probe path as the shortcut. “Autoload the prepared five” is only there to spare demo setup time; add <b>You</b> separately when you want the case to begin.</p></>;
+}
+
+function Case({ snapshot, onRun, busy }: { snapshot: Snapshot; onRun: () => void; busy: string | null }) {
+  const states = ["Human sets intent", "CNN creates + classifies an MNIST artifact", "MCP reads case notes + renders a chart", "Verifier and calibrator check the evidence", "Gemma drafts only from established facts", "Human approves or holds the report write"];
+  return <><div className="section-heading"><div><span>Loading-bay evidence review</span><h2>A deliberately mixed task, not six chatbots taking turns.</h2></div><span className="case-state">{snapshot.running ? "live trace underway" : snapshot.ready ? "room ready" : "waiting for all six"}</span></div><div className="timeline">{states.map((state, index) => <div key={state} className={snapshot.running ? "active" : ""}><b>{String(index + 1).padStart(2, "0")}</b><p>{state}</p></div>)}</div><div className="case-bottom"><div><span>Why it takes time</span><p>There are eleven paced, visible beats before any response latency. The human interactions make it naturally longer than two minutes.</p></div><button className="primary" disabled={!snapshot.ready || snapshot.running || busy !== null} onClick={onRun}><Icon name="play" />start the live case</button></div></>;
+}
+
+function LogView({ logs }: { logs: Log[] }) {
+  return <><div className="section-heading"><div><span>Unified event stream</span><h2>What the runtime actually said, as it said it.</h2></div><span className="case-state">{logs.length} events in this browser</span></div><div className="log-list">{logs.length === 0 ? <div className="empty-log">Waiting for the control room to emit its first event.</div> : logs.map((event) => <article key={event.id} className={`log-item ${event.kind}`}><time>{new Date(event.at * 1000).toLocaleTimeString()}</time><span>{event.kind.replaceAll("_", " ")}</span><p>{event.message}</p>{event.participant && <code>{event.participant}</code>}</article>)}</div></>;
+}
+
+function HumanDesk({ request, human, busy, onAdd, onAnswer }: { request: Request | null; human?: Participant; busy: string | null; onAdd: () => void; onAnswer: (answer: string | boolean) => void }) {
+  if (!human?.added) return <div className="human-empty"><Icon name="person" /><span>Human participant missing</span><h2>Add yourself as the sixth participant.</h2><p>The browser is registered as Maiku’s human channel. Until you join, the live case cannot start.</p><button className="primary" disabled={busy !== null} onClick={onAdd}><Icon name="plus" />add You</button></div>;
+  if (!request) return <div className="human-empty"><Icon name="shield" /><span>Human desk standing by</span><h2>You are present in the runtime.</h2><p>Start the live case. This tab will receive real choose and approval requests from the running Maiku session.</p></div>;
+  const options = request.detail.options || [];
+  return <div className="decision-card"><span>{request.kind === "approval" ? "approval required" : "your choice required"}</span><h2>{request.prompt}</h2>{request.kind === "approval" && <pre>{JSON.stringify(request.detail.detail, null, 2)}</pre>}<div className="decision-actions">{request.kind === "approval" ? <><button className="primary" disabled={busy !== null} onClick={() => onAnswer(true)}>approve write</button><button className="outline" disabled={busy !== null} onClick={() => onAnswer(false)}>deny write</button></> : options.map((option) => <button key={option} className="primary" disabled={busy !== null} onClick={() => onAnswer(option)}>{option}</button>)}</div><p><Icon name="pulse" />This response is sent through the browser channel back into the active Maiku session.</p></div>;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

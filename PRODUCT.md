@@ -28,7 +28,7 @@ A user creates a local workspace, adds participants through adapters, starts sha
 
 ## Capabilities and Constraints
 
-The first GUI is an interactive local-first demo of the Maiku runtime concepts, built on the frontend branch. It must use the real adapter and descriptor vocabulary and expose a clean runtime-client boundary for live Python sessions later. The underlying runtime is local-first, keeps a SQLite registry, treats artifacts as content-addressed references, and uses narrowing grants for bounded delegation. It does not promise automatic composition or complete hostile-code sandboxing.
+The first GUI is an interactive local-first live demo of the Maiku runtime, built on the frontend branch and carried into the `tests-gui` integration branch. A FastAPI control plane owns a real local Workspace; the browser adds its prepared participants through actual adapters, receives the unified event stream over SSE, and responds as the registered human channel. A one-click autoload shortcut is permitted only for the prepared demo recipes; it still executes their normal adapter and health-probe path. The underlying runtime is local-first, keeps a SQLite registry, treats artifacts as content-addressed references, and uses narrowing grants for bounded delegation. It does not promise automatic composition or complete hostile-code sandboxing.
 
 ## Brand Commitments
 

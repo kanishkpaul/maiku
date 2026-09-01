@@ -14,3 +14,6 @@ data/
 examples/real/data/
 *.tsbuildinfo
 .impeccable/
+.maiku-live-demo/
+playwright-report/
+test-results/
