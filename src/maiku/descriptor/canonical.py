@@ -1,8 +1,12 @@
 """Canonical serialization and content addressing.
 
-Identity is what a participant *is and can do* — not where it happens to be running or
-whether it is up right now. So residency, liveness and the signature itself are excluded
-from the hash: restarting Ollama on another port must not mint a new participant.
+Identity is capability: the affordance set, plus the handle that addresses it. Everything
+about where a participant runs, how it is reached, who made it and what it is called sits
+outside the hash — so restarting Ollama on another port, renaming it, or attributing it to
+a vendor all leave the same participant, while adding an affordance mints a new one.
+
+The handle stays inside because it is a position rather than a label: two people who both
+afford only `approve` are genuinely different participants.
 """
 
 import hashlib
@@ -12,7 +16,17 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from maiku.descriptor.participant import ParticipantDescriptor
 
-VOLATILE_FIELDS = frozenset({"id", "signature", "liveness", "runtime"})
+VOLATILE_FIELDS = frozenset(
+    {
+        "id",
+        "signature",
+        "liveness",
+        "runtime",
+        "bindings",  # where and how to reach it, not what it is
+        "display",  # a name is not a capability
+        "provenance",  # who made it is not what it can do
+    }
+)
 
 ID_PREFIX = "mk:"
 ID_LENGTH = 32
