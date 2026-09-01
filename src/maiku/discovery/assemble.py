@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from maiku.descriptor.affordance import Affordance
+from maiku.descriptor.binding import Binding
 from maiku.descriptor.enums import Kind
 from maiku.descriptor.participant import (
     Display,
@@ -101,7 +102,7 @@ async def discover(
     if not readings:
         raise NothingReadable(address, failures, skipped)
 
-    affordances, conflicts = merge_affordances(readings)
+    affordances, conflicts, served = merge_affordances(readings)
     return Discovery(
         descriptor=ParticipantDescriptor(
             handle=handle or f"{HANDLE_NAMESPACE}/{address.slug}",
@@ -110,7 +111,7 @@ async def discover(
             provenance=_provenance(address, readings),
             runtime=RuntimeInfo(residency=Residency.REMOTE, host=address.url),
             affordances=affordances,
-            bindings=[r.binding for r in readings],
+            bindings=[_binding(r, served) for r in readings],
             extensions={EXTENSION_KEY: {"conflicts": conflicts}} if conflicts else {},
         ),
         sources=tuple(r.source for r in readings),
@@ -121,14 +122,16 @@ async def discover(
 
 def merge_affordances(
     readings: Sequence[Reading],
-) -> tuple[list[Affordance], list[dict[str, Any]]]:
+) -> tuple[list[Affordance], list[dict[str, Any]], dict[str, list[str]]]:
     """Merge by name, highest precedence first. Readings arrive already sorted.
 
     A losing schema is recorded whole rather than summarised: an operator resolving a
-    disagreement needs the thing that lost, not a description of it.
+    disagreement needs the thing that lost, not a description of it. The loser also stops
+    claiming to serve that affordance, since the merged schema is not one it accepts.
     """
     kept: dict[str, Affordance] = {}
     winner: dict[str, str] = {}
+    served: dict[str, list[str]] = {r.source: [] for r in readings}
     conflicts: list[dict[str, Any]] = []
 
     for reading in readings:
@@ -137,7 +140,10 @@ def merge_affordances(
             if existing is None:
                 kept[affordance.name] = affordance
                 winner[affordance.name] = reading.source
-            elif not _same_shape(existing, affordance):
+                served[reading.source].append(affordance.name)
+            elif _same_shape(existing, affordance):
+                served[reading.source].append(affordance.name)
+            else:
                 conflicts.append(
                     {
                         "affordance": affordance.name,
@@ -146,7 +152,17 @@ def merge_affordances(
                         "discarded": affordance.model_dump(mode="json"),
                     }
                 )
-    return list(kept.values()), conflicts
+    return list(kept.values()), conflicts, served
+
+
+def _binding(reading: Reading, served: dict[str, list[str]]) -> Binding:
+    """Name what this endpoint actually serves, so a call reaches the reader that won it.
+
+    An empty list means "serves everything" to `Binding.serves`, so it is left empty only
+    when the source really does serve every affordance it read.
+    """
+    names = served.get(reading.source) or []
+    return reading.binding.model_copy(update={"affordances": names})
 
 
 def _same_shape(left: Affordance, right: Affordance) -> bool:

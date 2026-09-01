@@ -80,3 +80,14 @@ async def test_the_disagreement_goes_to_openapi_and_mcp_is_kept_verbatim(both):
 async def test_mcp_hints_survive_into_the_merged_descriptor(both):
     found = await discover(DEVICE, both)
     assert found.descriptor.affordance("reboot").side_effects is SideEffect.IRREVERSIBLE
+
+
+async def test_each_binding_names_what_it_actually_serves(both):
+    found = await discover(DEVICE, both)
+    by_scheme = {b.scheme: b for b in found.descriptor.bindings}
+
+    assert sorted(by_scheme["http"].affordances) == ["classify", "status"]
+    # mcp lost `classify` on schema, so it stops claiming to serve it.
+    assert by_scheme["mcp"].affordances == ["reboot"]
+    assert found.descriptor.binding_for("classify").scheme == "http"
+    assert found.descriptor.binding_for("reboot").scheme == "mcp"
