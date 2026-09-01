@@ -183,8 +183,14 @@ async def _which_apply(
         elif answer:
             applicable.append(discoverer)
         else:
-            skipped.append(Skipped(discoverer.name, "does not apply to this address"))
+            skipped.append(Skipped(discoverer.name, _why_not(discoverer, address)))
     return applicable, skipped
+
+
+def _why_not(discoverer: Discoverer, address: Address) -> str:
+    attempted = getattr(discoverer, "attempted", None)
+    tried = list(attempted(address)) if attempted else []
+    return "; ".join(str(a) for a in tried) or "does not apply to this address"
 
 
 async def _read_all(

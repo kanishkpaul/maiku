@@ -3,7 +3,7 @@
 import pytest
 
 from maiku.descriptor.enums import SideEffect
-from maiku.discovery.assemble import EXTENSION_KEY, discover
+from maiku.discovery.assemble import EXTENSION_KEY, NothingReadable, discover
 from maiku.discovery.base import Address
 from maiku.discovery.mcp import MCPDiscoverer
 from maiku.discovery.openapi import OpenAPIDiscoverer
@@ -91,3 +91,13 @@ async def test_each_binding_names_what_it_actually_serves(both):
     assert by_scheme["mcp"].affordances == ["reboot"]
     assert found.descriptor.binding_for("classify").scheme == "http"
     assert found.descriptor.binding_for("reboot").scheme == "mcp"
+
+
+async def test_a_total_failure_names_every_path_each_reader_tried(both):
+    with pytest.raises(NothingReadable) as raised:
+        await discover(Address.parse("http://device.local/absent"), both)
+
+    message = str(raised.value)
+    assert "/absent/openapi.json -> HTTP 404" in message
+    assert "/absent/swagger.json -> HTTP 404" in message
+    assert "/absent/mcp -> HTTP 404" in message

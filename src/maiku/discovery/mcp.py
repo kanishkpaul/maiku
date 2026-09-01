@@ -36,6 +36,9 @@ class MCPDiscoverer:
     async def applies(self, address: Address) -> bool:
         return await self._locate(address) is not None
 
+    def attempted(self, address: Address) -> list[Attempt]:
+        return self._missed.get(address.url, [])
+
     async def read(self, address: Address) -> Reading:
         located = await self._locate(address)
         if located is None:

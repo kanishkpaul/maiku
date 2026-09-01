@@ -116,3 +116,10 @@ class Discoverer(Protocol):
 
     async def read(self, address: Address) -> Reading:
         """Affordances plus one binding, or `NotReadable` naming what was tried."""
+
+    def attempted(self, address: Address) -> Sequence[Attempt]:
+        """What the last `applies` looked at, so a "no" can say more than no.
+
+        Optional: assembly falls back to a plain message for discoverers that do not keep
+        the record. Implementing it is what makes a total failure legible.
+        """
