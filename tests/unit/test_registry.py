@@ -1,5 +1,6 @@
 import pytest
 
+from maiku.descriptor import Affordance, Binding, Transport
 from maiku.descriptor.enums import Kind
 from maiku.runtime.registry import Registry, UnknownParticipant, searchable_text
 from maiku.wire.health import Health
@@ -24,11 +25,51 @@ def test_missing_handle_raises(registry):
         registry.get("nobody/here")
 
 
-def test_re_adding_keeps_first_seen(registry, descriptor):
+def test_a_first_add_is_new(registry, descriptor):
+    registered = registry.add(descriptor, "hf:sentiment")
+    assert registered.is_new
+    assert registered.identity_changed is False
+
+
+def test_re_adding_keeps_first_seen_and_reports_nothing_changed(registry, descriptor):
     first = registry.add(descriptor, "hf:sentiment")
     again = registry.add(descriptor, "hf:sentiment-v2")
-    assert again.first_seen == first.first_seen
+    assert again.entry.first_seen == first.entry.first_seen
+    assert again.is_new is False
+    assert again.identity_changed is False
     assert registry.get(descriptor.handle).uri == "hf:sentiment-v2"
+
+
+def test_moving_the_endpoint_is_not_an_identity_change(registry, descriptor):
+    registry.add(descriptor, "openai:local")
+    moved = make_descriptor(
+        bindings=[
+            Binding(scheme="openai", transport=Transport.HTTP, uri="http://127.0.0.1:11435/v1")
+        ]
+    )
+    assert registry.add(moved, "openai:local").identity_changed is False
+
+
+def test_a_new_affordance_under_a_known_handle_is_reported(registry, descriptor):
+    registry.add(descriptor, "u")
+    grown = make_descriptor(
+        affordances=[*descriptor.affordances, Affordance(name="explain", summary="Explain it")]
+    )
+    registered = registry.add(grown, "u")
+    assert registered.identity_changed
+    assert registered.replaced_content_id == descriptor.id
+
+
+def test_by_content_id_finds_the_stored_capability_set(registry, descriptor):
+    registry.add(descriptor, "u")
+    assert [e.handle for e in registry.by_content_id(descriptor.id)] == [descriptor.handle]
+    assert registry.by_content_id("mk:" + "0" * 32) == []
+
+
+def test_an_update_rebuilds_the_search_index_rather_than_duplicating_it(registry, descriptor):
+    registry.add(descriptor, "u")
+    registry.add(descriptor, "u")
+    assert [e.handle for e in registry.find("sentiment")] == [descriptor.handle]
 
 
 def test_remove(registry, descriptor):

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS participants (
     last_seen   REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS participants_kind ON participants(kind);
+CREATE INDEX IF NOT EXISTS participants_content ON participants(content_id);
 """
 
 FTS_SCHEMA = """
@@ -60,6 +61,32 @@ class Entry(BaseModel):
     @property
     def online(self) -> bool:
         return bool(self.health and self.health.online)
+
+
+class Registration(BaseModel):
+    """What one write did, which `Entry` alone cannot say.
+
+    Kept off `Entry` because it is true of a write rather than of the row: `get`, `list`
+    and `find` would all have to invent a value for it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    entry: Entry
+    replaced_content_id: str | None = None
+
+    @property
+    def is_new(self) -> bool:
+        return self.replaced_content_id is None
+
+    @property
+    def identity_changed(self) -> bool:
+        """The participant now affords something different under a handle already in use.
+
+        The one change worth interrupting an operator for, and the one this registry used
+        to overwrite without saying so.
+        """
+        return not self.is_new and self.replaced_content_id != self.entry.descriptor.id
 
 
 def searchable_text(descriptor: ParticipantDescriptor) -> str:
@@ -108,12 +135,13 @@ class Registry:
     def __exit__(self, *exc_info: object) -> None:
         self.close()
 
-    def add(self, descriptor: ParticipantDescriptor, uri: str) -> Entry:
+    def add(self, descriptor: ParticipantDescriptor, uri: str) -> Registration:
         now = time.time()
-        existing = self._db.execute(
-            "SELECT first_seen FROM participants WHERE handle = ?", (descriptor.handle,)
+        previous = self._db.execute(
+            "SELECT content_id, first_seen FROM participants WHERE handle = ?",
+            (descriptor.handle,),
         ).fetchone()
-        first_seen = existing["first_seen"] if existing else now
+        first_seen = previous["first_seen"] if previous else now
 
         self._db.execute(
             """
@@ -139,7 +167,10 @@ class Registry:
         )
         self._index(descriptor)
         self._db.commit()
-        return Entry(descriptor=descriptor, uri=uri, first_seen=first_seen, last_seen=now)
+        return Registration(
+            entry=Entry(descriptor=descriptor, uri=uri, first_seen=first_seen, last_seen=now),
+            replaced_content_id=previous["content_id"] if previous else None,
+        )
 
     def _index(self, descriptor: ParticipantDescriptor) -> None:
         if not self._fts:
@@ -162,6 +193,17 @@ class Registry:
         if row is None:
             raise UnknownParticipant(handle)
         return self._entry(row)
+
+    def by_content_id(self, content_id: str) -> list[Entry]:
+        """Every handle whose descriptor hashes to this id.
+
+        Nothing else in the registry can answer "is this the same thing I already have,
+        wearing another name" — a handle lookup only finds the name you already knew.
+        """
+        rows = self._db.execute(
+            "SELECT * FROM participants WHERE content_id = ? ORDER BY handle", (content_id,)
+        )
+        return [self._entry(row) for row in rows]
 
     def list(self, kind: Kind | None = None, online: bool | None = None) -> list[Entry]:
         sql = "SELECT * FROM participants"

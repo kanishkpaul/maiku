@@ -54,13 +54,13 @@ async def main(interactive: bool) -> int:
             say("adapting participants")
             channel = "cli" if interactive else "scripted"
             for uri in (PARTICIPANTS, FILES, f"human:reviewer?channel={channel}"):
-                entry = await workspace.add(uri)
+                entry = (await workspace.add(uri)).entry
                 kind = entry.descriptor.kind.value
                 print(f"  {entry.handle:<22} {kind:<7} {len(entry.descriptor.affordances)} acts")
 
             for candidate in ("ollama:qwen3:8b", "ollama:llama3.2", "ollama:qwen2.5"):
                 try:
-                    entry = await workspace.add(candidate)
+                    entry = (await workspace.add(candidate)).entry
                 except Exception:
                     continue
                 if (await workspace.refresh(entry.handle)).online:

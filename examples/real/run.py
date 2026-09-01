@@ -79,7 +79,7 @@ async def main(interactive: bool) -> int:
         with Workspace(root / "home") as workspace:
             say("adapting four participants")
             for uri in sources:
-                entry = await workspace.add(uri)
+                entry = (await workspace.add(uri)).entry
                 health = await workspace.refresh(entry.handle)
                 mark = "up" if health.online else f"DOWN ({health.detail})"
                 print(

@@ -34,7 +34,7 @@ async def test_adapting_registers_a_participant(workspace):
 
 async def test_handle_override(tmp_path):
     with Workspace(tmp_path / "h") as ws:
-        entry = await ws.add(SAMPLE, handle="mine/scorer")
+        entry = (await ws.add(SAMPLE, handle="mine/scorer")).entry
         assert entry.descriptor.handle == "mine/scorer"
         assert ws.registry.get("mine/scorer")
 

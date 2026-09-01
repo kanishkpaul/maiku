@@ -12,7 +12,7 @@ from maiku.adapters.registry import open_participant
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.runtime.artifacts import ArtifactStore
 from maiku.runtime.home import home
-from maiku.runtime.registry import Entry, Registry
+from maiku.runtime.registry import Registration, Registry
 from maiku.wire.health import Health
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class Workspace:
         self.registry = Registry(self.root / "registry.sqlite")
         self.artifacts = ArtifactStore(self.root / "artifacts")
 
-    async def add(self, uri: str, handle: str | None = None) -> Entry:
+    async def add(self, uri: str, handle: str | None = None) -> Registration:
         """Adapt something and remember it.
 
         The adapter is closed again straight after describing: registration should not pin

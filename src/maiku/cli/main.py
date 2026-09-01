@@ -55,8 +55,15 @@ def add(
 
     async def run() -> None:
         with workspace(home) as ws:
-            entry = await ws.add(uri, handle)
+            registered = await ws.add(uri, handle)
+            entry = registered.entry
             typer.echo(f"{entry.handle}  ({len(entry.descriptor.affordances)} affordances)")
+            if registered.identity_changed:
+                typer.secho(
+                    f"capabilities changed under this handle "
+                    f"(was {registered.replaced_content_id})",
+                    fg=typer.colors.YELLOW,
+                )
             typer.echo(render.detail(entry.descriptor))
 
     _run(run())
