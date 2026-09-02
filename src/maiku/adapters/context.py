@@ -71,6 +71,10 @@ class CallContext:
         if self.cancelled:
             raise CallCancelled(self.task_id)
 
+    async def wait_cancelled(self) -> None:
+        """Wait without polling so a quiet long-lived device stream can still stop promptly."""
+        await self._cancelled.wait()
+
     @property
     def remaining(self) -> float | None:
         return None if self.deadline is None else max(0.0, self.deadline - time.time())

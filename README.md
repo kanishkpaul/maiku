@@ -53,6 +53,8 @@ Two worked examples:
   stops for human approval.
 - [`examples/triage`](examples/triage/README.md) — five participants on one task, including
   the moment the runtime refuses an over-reaching call.
+- [`examples/things/2026-09-02-hue-vertical-slice`](examples/things/2026-09-02-hue-vertical-slice/README.md)
+  — a CNN, local language model, person and real Hue light through one governed trace.
 
 ## The model
 
@@ -65,6 +67,9 @@ does not mint a new participant, and a descriptor read back off disk verifies it
 [W3C Web of Things](https://www.w3.org/TR/wot-thing-description11/): `invoke`, `stream`,
 `property`, `event`. That vocabulary is what survives non-chatbots — a classifier invokes, an
 LLM streams, a robot joint is a property, a monitor emits events.
+
+Properties carry an explicit `read` or `write` operation and events carry `subscribe`.
+Read and write are separate affordances so a read-only grant cannot mutate a device.
 
 **Events** — every call, whatever it is underneath, is a stream of the same events:
 `Started · Progress · Delta · ArtifactWritten · NeedsInput · NeedsApproval · Log · Usage ·
@@ -92,6 +97,7 @@ Bounded delegation is the thing MCP, A2A and ACP all leave to trust.
 | `torch` | an `nn.Module` or TorchScript file | `torch:mypkg:Model` |
 | `hf` | a Hugging Face pipeline | `hf:openai/whisper-tiny?task=automatic-speech-recognition` |
 | `human` | a person | `human:you?channel=cli` |
+| `hue` | a Philips Hue CLIP v2 light | `hue:https://bridge.local?light=<id>` |
 
 Descriptors are **derived**, not written. A Python signature becomes an input schema, a
 docstring becomes the summary, a generator becomes a streaming affordance, an OpenAPI
