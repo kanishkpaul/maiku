@@ -185,11 +185,19 @@
       "additionalProperties": false,
       "properties": {
         "affordances": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Affordances",
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affordances"
         },
         "auth": {
           "anyOf": [

@@ -31,8 +31,10 @@ class Binding(BaseModel):
     uri: str | None = None
     auth: AuthRef | None = None
 
-    affordances: list[str] = Field(default_factory=list)
+    affordances: list[str] | None = None
     config: dict[str, Any] = Field(default_factory=dict)
 
     def serves(self, affordance: str) -> bool:
-        return not self.affordances or affordance in self.affordances
+        if self.affordances is None:
+            return True
+        return affordance in self.affordances

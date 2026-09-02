@@ -171,3 +171,25 @@ def test_serve_refuses_non_loopback_without_grant(home):
     result = run("serve", "a2a", "--host", "0.0.0.0", *home)
     assert result.exit_code == 1
     assert "refusing to serve root grant on non-loopback host" in result.output
+
+
+def test_describe_json_and_maiku_formats_honour_grant(stocked):
+    json_res = run(
+        "describe", "test/sample", "--as", "json", "--grant", "test/sample#fetch", *stocked
+    )
+    assert json_res.exit_code == 0
+    affs = [a["name"] for a in json.loads(json_res.stdout)["affordances"]]
+    assert affs == ["fetch"]
+
+    maiku_res = run(
+        "describe", "test/sample", "--as", "maiku", "--grant", "test/sample#fetch", *stocked
+    )
+    assert maiku_res.exit_code == 0
+    assert "fetch" in maiku_res.stdout
+    assert "narrate" not in maiku_res.stdout
+
+
+def test_describe_warns_on_mistyped_grant_spec(stocked):
+    result = run("describe", "test/sample", "--as", "mcp", "--grant", "test/sampl#fetch", *stocked)
+    assert result.exit_code == 0
+    assert "note: --grant spec does not mention participant 'test/sample'" in result.output

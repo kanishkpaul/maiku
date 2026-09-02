@@ -19,6 +19,7 @@ from maiku.gateways.a2a_server import WELL_KNOWN, A2AGateway
 from maiku.gateways.http_server import run as run_http
 from maiku.gateways.mcp_server import MCPGateway
 from maiku.projections import a2a, mcp, openai_tools
+from maiku.projections.visible import visible
 from maiku.runtime.escalation import route_to
 from maiku.runtime.grants import WILDCARD, Capability, Grant, root_grant
 from maiku.runtime.registry import UnknownParticipant
@@ -125,9 +126,22 @@ def describe(
         descriptor = _lookup(ws, handle).descriptor
     grant = grant_from(grant_spec)
 
+    if grant_spec:
+        parsed_caps = [Capability.parse(s) for s in grant_spec]
+        if not any(c.participant in (WILDCARD, handle) for c in parsed_caps):
+            msg = f"note: --grant spec does not mention participant {handle!r}"
+            typer.secho(msg, fg=typer.colors.YELLOW, err=True)
+
+    vis = visible(descriptor, grant)
+
+    def _json_view() -> str:
+        d = descriptor.model_dump(mode="json")
+        d["affordances"] = [a.model_dump(mode="json") for a in vis]
+        return render.as_json(d)
+
     views: dict[str, Any] = {
-        "maiku": lambda: render.detail(descriptor),
-        "json": lambda: render.as_json(descriptor.model_dump(mode="json")),
+        "maiku": lambda: render.detail(descriptor, affordances=vis),
+        "json": _json_view,
         "mcp": lambda: render.as_json(mcp.to_tools(descriptor, grant)),
         "a2a": lambda: render.as_json(a2a.to_agent_card(descriptor, grant)),
         "openai": lambda: render.as_json(openai_tools.to_tools(descriptor, grant)),

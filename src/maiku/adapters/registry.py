@@ -64,15 +64,17 @@ def coerce(raw: str) -> ParticipantURI:
         uri = ParticipantURI.parse(raw)
     except InvalidURI:
         return _as_auto(raw)
+    if uri.scheme == "http" and uri.target.startswith("//"):
+        return _as_auto(raw)
     return uri if uri.scheme in known_schemes() else _as_auto(raw)
 
 
 def looks_like_an_address(raw: str) -> bool:
     if "://" in raw:
         return True
-    host, _, port = raw.partition(":")
-    if port and not port.isdigit():
-        return False
+    host, sep, port = raw.partition(":")
+    if sep:
+        return port.isdigit()
     return "." in host or host == "localhost"
 
 

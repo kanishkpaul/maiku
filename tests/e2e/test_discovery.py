@@ -70,3 +70,76 @@ def test_the_cli_adds_lists_and_describes_it_once(device, tmp_path):
     described = runner.invoke(app, ["describe", handle, *home])
     assert described.exit_code == 0, described.output
     assert "http" in described.stdout and "mcp" in described.stdout
+
+
+def test_http_url_and_host_port_coercion():
+    from maiku.adapters.registry import coerce
+    from maiku.adapters.uri import InvalidURI, ParticipantURI
+
+    assert coerce("http://device.local") == ParticipantURI.parse("auto:http://device.local")
+    assert coerce("https://device.local") == ParticipantURI.parse("auto:https://device.local")
+    assert coerce("http:https://api.com/spec.json") == ParticipantURI.parse("http:https://api.com/spec.json")
+
+    assert coerce("raspberrypi:8080") == ParticipantURI.parse("auto:raspberrypi:8080")
+    with pytest.raises(InvalidURI, match="no adapter for scheme 'ollma'"):
+        coerce("ollma:qwen3")
+
+
+async def test_binding_that_won_no_affordances_serves_none():
+    from maiku.descriptor.affordance import Affordance
+    from maiku.descriptor.binding import Binding, Transport
+    from maiku.descriptor.enums import AffordanceKind, Determinism, LatencyClass, SideEffect
+    from maiku.discovery.assemble import discover
+    from maiku.discovery.base import Address, Reading
+
+    a1 = Affordance(
+        name="classify",
+        summary="s1",
+        description="d1",
+        kind=AffordanceKind.INVOKE,
+        input_schema={"type": "string"},
+        output_schema={},
+        determinism=Determinism.DETERMINISTIC,
+        latency_class=LatencyClass.SECONDS,
+        idempotent=True,
+        side_effects=SideEffect.READ,
+    )
+    a2 = Affordance(
+        name="classify",
+        summary="s2",
+        description="d2",
+        kind=AffordanceKind.INVOKE,
+        input_schema={"type": "number"},
+        output_schema={},
+        determinism=Determinism.DETERMINISTIC,
+        latency_class=LatencyClass.SECONDS,
+        idempotent=True,
+        side_effects=SideEffect.READ,
+    )
+
+    class D1:
+        name = "openapi"
+        precedence = 30
+
+        async def applies(self, address):
+            return True
+
+        async def read(self, address):
+            b = Binding(scheme="http", transport=Transport.HTTP)
+            return Reading(source="openapi", affordances=[a1], binding=b)
+
+    class D2:
+        name = "mcp"
+        precedence = 20
+
+        async def applies(self, address):
+            return True
+
+        async def read(self, address):
+            b = Binding(scheme="mcp", transport=Transport.STDIO)
+            return Reading(source="mcp", affordances=[a2], binding=b)
+
+    found = await discover(Address.parse("http://127.0.0.1"), [D1(), D2()])
+    mcp_binding = next(b for b in found.descriptor.bindings if b.scheme == "mcp")
+    assert mcp_binding.affordances == []
+    assert mcp_binding.serves("classify") is False

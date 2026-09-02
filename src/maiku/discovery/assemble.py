@@ -103,6 +103,9 @@ async def discover(
         raise NothingReadable(address, failures, skipped)
 
     affordances, conflicts, served = merge_affordances(readings)
+    if not affordances:
+        raise NothingReadable(address, failures, skipped)
+
     return Discovery(
         descriptor=ParticipantDescriptor(
             handle=handle or f"{HANDLE_NAMESPACE}/{address.slug}",
@@ -156,12 +159,10 @@ def merge_affordances(
 
 
 def _binding(reading: Reading, served: dict[str, list[str]]) -> Binding:
-    """Name what this endpoint actually serves, so a call reaches the reader that won it.
-
-    An empty list means "serves everything" to `Binding.serves`, so it is left empty only
-    when the source really does serve every affordance it read.
-    """
-    names = served.get(reading.source) or []
+    """Name what this endpoint actually serves, so a call reaches the reader that won it."""
+    names = served.get(reading.source)
+    if names is None:
+        names = []
     return reading.binding.model_copy(update={"affordances": names})
 
 

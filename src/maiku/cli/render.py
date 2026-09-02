@@ -7,6 +7,7 @@ a participant cannot be inspected on a bare machine.
 import json
 from typing import Any
 
+from maiku.descriptor.affordance import Affordance
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.runtime.registry import Entry
 from maiku.wire.events import (
@@ -49,7 +50,10 @@ def listing(entries: list[Entry]) -> str:
     return _table(headers, rows)
 
 
-def detail(descriptor: ParticipantDescriptor) -> str:
+def detail(
+    descriptor: ParticipantDescriptor, affordances: list[Affordance] | None = None
+) -> str:
+    affs = descriptor.affordances if affordances is None else affordances
     lines = [
         f"{descriptor.handle}  ({descriptor.kind.value})",
         f"  {descriptor.display.description or descriptor.display.name}",
@@ -60,7 +64,9 @@ def detail(descriptor: ParticipantDescriptor) -> str:
         "",
         "  affordances",
     ]
-    for affordance in descriptor.affordances:
+    if not affs:
+        lines.append("    (none visible to caller)")
+    for affordance in affs:
         flags = [affordance.kind.value, affordance.latency_class.value]
         if affordance.idempotent:
             flags.append("idempotent")
@@ -77,7 +83,12 @@ def detail(descriptor: ParticipantDescriptor) -> str:
     # One participant may be reachable several ways; discovery makes that ordinary.
     lines += ["", "  bindings"]
     for binding in descriptor.bindings:
-        serves = ", ".join(binding.affordances) or "all"
+        if binding.affordances is None:
+            serves = "all"
+        elif not binding.affordances:
+            serves = "none"
+        else:
+            serves = ", ".join(binding.affordances)
         lines.append(f"    {binding.scheme:<20} {binding.uri or binding.transport.value}")
         lines.append(f"    {'':<20} serves: {serves}")
     return "\n".join(lines)

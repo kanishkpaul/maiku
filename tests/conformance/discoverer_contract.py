@@ -80,3 +80,24 @@ class DiscovererContract:
         payload = found.descriptor.model_dump(mode="json")
         assert type(found.descriptor)(**payload).id == found.descriptor.id
         assert found.sources == (discoverer.name,)
+
+    async def test_assembly_with_no_affordances_raises_nothing_readable(self):
+        from maiku.descriptor.enums import Transport
+        from maiku.discovery.assemble import NothingReadable
+
+        class EmptyDiscoverer:
+            name = "empty"
+            precedence = 10
+
+            async def applies(self, address):
+                return True
+
+            async def read(self, address):
+                return Reading(
+                    source=self.name,
+                    affordances=[],
+                    binding=Binding(scheme="http", transport=Transport.HTTP),
+                )
+
+        with pytest.raises(NothingReadable):
+            await discover(UNREACHABLE, [EmptyDiscoverer()])
