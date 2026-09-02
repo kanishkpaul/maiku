@@ -211,10 +211,12 @@ def serve(
                 if human:
                     session.responder = route_to(session, human)
                 if protocol == "mcp":
-                    await MCPGateway(session).serve_stdio()
+                    await MCPGateway(session, grant=session.root_grant).serve_stdio()
                     return
 
-                gateway = A2AGateway(session, base_url=f"http://{host}:{port}")
+                gateway = A2AGateway(
+                    session, base_url=f"http://{host}:{port}", grant=session.root_grant
+                )
                 typer.echo(f"a2a on http://{host}:{port}{WELL_KNOWN}", err=True)
                 await run_http(_a2a_routes(gateway), host, port)
 

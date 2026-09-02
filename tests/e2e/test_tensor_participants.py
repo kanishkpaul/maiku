@@ -102,7 +102,7 @@ async def test_a_non_chat_model_still_projects_to_both_ecosystems(workspace):
 
 
 async def test_a_classifier_is_callable_from_an_mcp_client(session):
-    gateway = MCPGateway(session)
+    gateway = MCPGateway(session, grant=session.root_grant)
     result = await gateway.call_tool("local_vision__logits", {"pixels": [1.0, 2.0]})
     assert result["isError"] is False
     assert result["structuredContent"]["shape"] == [3]

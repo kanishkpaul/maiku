@@ -14,6 +14,8 @@ from typing import Any
 from maiku.descriptor.affordance import Affordance
 from maiku.projections.a2a import PROTOCOL_VERSION, to_agent_card
 from maiku.projections.naming import handle_slug
+from maiku.projections.visible import visible
+from maiku.runtime.grants import Grant
 from maiku.runtime.registry import Entry
 from maiku.runtime.session import Session
 from maiku.wire.events import ArtifactWritten, Failed, Finished
@@ -72,9 +74,24 @@ def arguments_from(message: dict[str, Any], affordance: Affordance) -> dict[str,
 
 
 class A2AGateway:
-    def __init__(self, session: Session, base_url: str = "http://localhost:8080") -> None:
+    """Serves one connected client, under that client's grant.
+
+    Like the MCP gateway: no grant means no skills and no routes, not the whole workspace.
+    """
+
+    def __init__(
+        self,
+        session: Session,
+        base_url: str = "http://localhost:8080",
+        *,
+        grant: Grant | None = None,
+    ) -> None:
         self.session = session
         self.base_url = base_url.rstrip("/")
+        self.grant = grant
+
+    def _visible(self, entry: Entry) -> list[Affordance]:
+        return visible(entry.descriptor, self.grant) if self.grant else []
 
     def _entry(self, slug: str) -> Entry | None:
         for entry in self.session.participants():
@@ -88,8 +105,10 @@ class A2AGateway:
         entry = self._entry(slug)
         if entry is None:
             return None
+        if self.grant is None:
+            return None
         return to_agent_card(
-            entry.descriptor, self.session.root_grant, base_url=f"{self.base_url}/agents/{slug}"
+            entry.descriptor, self.grant, base_url=f"{self.base_url}/agents/{slug}"
         )
 
     def _aggregate_card(self) -> dict[str, Any]:
@@ -97,7 +116,7 @@ class A2AGateway:
         skills = []
         for entry in self.session.participants():
             slug = handle_slug(entry.handle)
-            for affordance in entry.descriptor.affordances:
+            for affordance in self._visible(entry):
                 skills.append(
                     {
                         "id": f"{slug}__{affordance.name}",
@@ -130,15 +149,19 @@ class A2AGateway:
         }
 
     def _resolve(self, skill: str, slug: str | None) -> tuple[str, str] | None:
+        """Only what this client can see resolves, so an unoffered skill has no route."""
         if slug is not None:
             entry = self._entry(slug)
-            return (entry.handle, skill) if entry else None
+            name = skill
+        else:
+            participant_slug, sep, name = skill.rpartition("__")
+            if not sep:
+                return None
+            entry = self._entry(participant_slug)
 
-        participant_slug, sep, affordance = skill.rpartition("__")
-        if not sep:
+        if entry is None or name not in {a.name for a in self._visible(entry)}:
             return None
-        entry = self._entry(participant_slug)
-        return (entry.handle, affordance) if entry else None
+        return entry.handle, name
 
     async def rpc(self, message: dict[str, Any], slug: str | None = None) -> dict[str, Any] | None:
         message_id = message.get("id")
@@ -190,7 +213,9 @@ class A2AGateway:
         detail = ""
         task_id = ""
 
-        async for event in self.session.call(handle, affordance_name, arguments):
+        async for event in self.session.call(
+            handle, affordance_name, arguments, caller=self.grant.subject, grant=self.grant
+        ):
             task_id = task_id or self._latest_task_id(handle)
             if isinstance(event, ArtifactWritten):
                 artifacts.append(

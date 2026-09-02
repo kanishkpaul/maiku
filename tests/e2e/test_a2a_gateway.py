@@ -6,6 +6,8 @@ import pytest
 
 from maiku.descriptor.affordance import Affordance
 from maiku.gateways.a2a_server import A2AGateway, arguments_from
+from maiku.projections.naming import handle_slug
+from maiku.runtime.grants import Capability
 from maiku.runtime.workspace import Workspace
 
 SAMPLE = "python:tests.fixtures.sample_module"
@@ -19,7 +21,7 @@ async def gateway(tmp_path):
         await ws.add(SAMPLE)
         await ws.add(VISION)
         async with ws.session() as session:
-            yield A2AGateway(session, base_url="http://host:8080")
+            yield A2AGateway(session, base_url="http://host:8080", grant=session.root_grant)
 
 
 def send(skill, text=None, data=None, message_id=1):
@@ -144,7 +146,32 @@ async def test_an_mcp_server_can_be_served_out_over_a2a(tmp_path):
     with Workspace(tmp_path / "home") as ws:
         await ws.add(UPSTREAM)
         async with ws.session() as session:
-            gateway = A2AGateway(session)
+            gateway = A2AGateway(session, grant=session.root_grant)
             response = await gateway.rpc(send("mcp_fixture__read_file", data={"path": "notes.md"}))
 
     assert response["result"]["artifacts"][0]["parts"][0]["text"] == "contents of notes.md"
+
+
+async def test_a_gateway_with_no_grant_offers_no_skills(tmp_path):
+    with Workspace(tmp_path / "home") as ws:
+        await ws.add(SAMPLE)
+        async with ws.session() as session:
+            gateway = A2AGateway(session, grant=None)
+
+            assert gateway.agent_card()["skills"] == []
+            assert gateway.agent_card(handle_slug("test/sample")) is None
+
+
+async def test_the_agent_card_is_filtered_by_the_clients_grant(tmp_path):
+    with Workspace(tmp_path / "home") as ws:
+        await ws.add(SAMPLE)
+        async with ws.session() as session:
+            guest = A2AGateway(
+                session,
+                grant=session.grant("guest", capabilities=[Capability.parse("test/sample#fetch")]),
+            )
+            card = guest.agent_card(handle_slug("test/sample"))
+            assert [s["id"] for s in card["skills"]] == ["fetch"]
+
+            operator = A2AGateway(session, grant=session.root_grant)
+            assert len(operator.agent_card(handle_slug("test/sample"))["skills"]) > 1

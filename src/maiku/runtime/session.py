@@ -81,14 +81,21 @@ class Session:
         arguments: dict[str, Any] | None = None,
         *,
         caller: str | None = None,
+        grant: Grant | None = None,
         readable: set[str] | None = None,
     ) -> AsyncIterator[Event]:
+        """`grant` overrides the lookup for callers the session never issued one to.
+
+        A gateway holds its client's grant directly; without this it would have to be
+        registered under a subject first, and a subject the session did not recognise
+        would quietly fall back to the owner's root grant.
+        """
         return self.router.call(
             handle,
             affordance,
             arguments,
             caller=caller,
-            grant=self.grant_for(caller),
+            grant=grant or self.grant_for(caller),
             readable=readable,
         )
 

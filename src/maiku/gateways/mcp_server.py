@@ -12,6 +12,8 @@ from typing import Any
 
 from maiku.projections.mcp import to_tools
 from maiku.projections.naming import handle_slug, unflatten
+from maiku.projections.visible import visible
+from maiku.runtime.grants import Grant
 from maiku.runtime.session import Session
 from maiku.wire.events import ArtifactWritten, Failed, Finished, Log
 
@@ -21,29 +23,49 @@ INTERNAL_ERROR = -32603
 
 
 class MCPGateway:
-    def __init__(self, session: Session, name: str = "maiku", version: str = "0.0.1") -> None:
+    """Serves one connected client, under that client's grant.
+
+    A gateway with no grant serves nothing rather than everything. The safe default is the
+    same one `router.deny_everything` takes: a runtime with nobody watching must not
+    self-approve, and it must not self-authorise either.
+    """
+
+    def __init__(
+        self,
+        session: Session,
+        name: str = "maiku",
+        version: str = "0.0.1",
+        *,
+        grant: Grant | None = None,
+    ) -> None:
         self.session = session
         self.name = name
         self.version = version
+        self.grant = grant
 
     def _routes(self) -> dict[str, tuple[str, str]]:
         """Flattened tool name to (handle, affordance).
 
-        Rebuilt per listing rather than cached, so a participant adapted mid-session shows
-        up without a restart.
+        Built from what this client can see, so a tool it was never offered is not
+        reachable by guessing the name. Rebuilt per listing rather than cached, so a
+        participant adapted mid-session shows up without a restart.
         """
+        if self.grant is None:
+            return {}
         routes = {}
         for entry in self.session.participants():
-            for affordance in entry.descriptor.affordances:
-                slug = handle_slug(entry.descriptor.handle)
+            slug = handle_slug(entry.descriptor.handle)
+            for affordance in visible(entry.descriptor, self.grant):
                 routes[f"{slug}__{affordance.name}"] = (entry.handle, affordance.name)
         return routes
 
     def tools(self) -> list[dict[str, Any]]:
+        if self.grant is None:
+            return []
         return [
             tool
             for entry in self.session.participants()
-            for tool in to_tools(entry.descriptor, self.session.root_grant)
+            for tool in to_tools(entry.descriptor, self.grant)
         ]
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +82,9 @@ class MCPGateway:
         result: Any = None
         failure: Failed | None = None
 
-        async for event in self.session.call(handle, affordance, arguments):
+        async for event in self.session.call(
+            handle, affordance, arguments, caller=self.grant.subject, grant=self.grant
+        ):
             if isinstance(event, ArtifactWritten):
                 blocks.append(
                     {

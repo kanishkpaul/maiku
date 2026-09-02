@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from maiku.gateways.mcp_server import MCPGateway
+from maiku.runtime.grants import Capability
 from maiku.runtime.workspace import Workspace
 
 SAMPLE = "python:tests.fixtures.sample_module"
@@ -14,11 +15,12 @@ UPSTREAM = f"mcp:{sys.executable} -u tests/fixtures/mcp_server.py"
 
 @pytest.fixture
 async def gateway(tmp_path):
+    """A client holding the operator's own authority, which is the ordinary local case."""
     with Workspace(tmp_path / "home") as ws:
         await ws.add(SAMPLE)
         await ws.add("human:kanishk?channel=unreachable")
         async with ws.session() as session:
-            yield MCPGateway(session)
+            yield MCPGateway(session, grant=session.root_grant)
 
 
 def rpc(method, params=None, message_id=1):
@@ -97,7 +99,7 @@ async def test_an_mcp_server_can_be_re_served_through_maiku(tmp_path):
     with Workspace(tmp_path / "home") as ws:
         await ws.add(UPSTREAM)
         async with ws.session() as session:
-            gateway = MCPGateway(session)
+            gateway = MCPGateway(session, grant=session.root_grant)
             result = (
                 await gateway.handle(
                     rpc(
@@ -114,7 +116,7 @@ async def test_artifacts_come_back_as_resource_links(tmp_path):
     with Workspace(tmp_path / "home") as ws:
         await ws.add(UPSTREAM)
         async with ws.session() as session:
-            gateway = MCPGateway(session)
+            gateway = MCPGateway(session, grant=session.root_grant)
             result = (
                 await gateway.handle(
                     rpc(
@@ -128,3 +130,43 @@ async def test_artifacts_come_back_as_resource_links(tmp_path):
     assert len(links) == 1
     assert links[0]["mimeType"] == "image/png"
     assert links[0]["uri"].startswith("maiku://artifact/sha256:")
+
+
+@pytest.fixture
+async def stocked(tmp_path):
+    with Workspace(tmp_path / "home") as ws:
+        await ws.add(SAMPLE)
+        async with ws.session() as session:
+            yield session
+
+
+async def test_a_gateway_with_no_grant_serves_nothing(stocked):
+    """Not everything. The same default `router.deny_everything` takes."""
+    gateway = MCPGateway(stocked)
+
+    assert gateway.tools() == []
+    result = await gateway.call_tool("test_sample__fetch", {"key": "k"})
+    assert result["isError"] is True
+
+
+async def test_two_clients_on_one_session_see_different_tools(stocked):
+    operator = MCPGateway(stocked, grant=stocked.root_grant)
+    guest = MCPGateway(
+        stocked,
+        grant=stocked.grant("guest", capabilities=[Capability.parse("test/sample#fetch")]),
+    )
+
+    assert len(operator.tools()) > len(guest.tools())
+    assert [t["_meta"]["maiku/affordance"] for t in guest.tools()] == ["fetch"]
+
+
+async def test_a_tool_a_client_was_never_offered_has_no_route(stocked):
+    guest = MCPGateway(
+        stocked,
+        grant=stocked.grant("guest", capabilities=[Capability.parse("test/sample#fetch")]),
+    )
+    offered = {t["name"] for t in guest.tools()}
+    assert "test_sample__score" not in offered
+
+    result = await guest.call_tool("test_sample__score", {"text": "hi"})
+    assert result["isError"] is True
