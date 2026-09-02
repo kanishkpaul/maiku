@@ -17,6 +17,7 @@ from maiku.descriptor import (
     SideEffect,
     Transport,
 )
+from maiku.runtime.grants import Grant, root_grant
 
 
 def make_descriptor(**overrides) -> ParticipantDescriptor:
@@ -59,3 +60,13 @@ def make_descriptor(**overrides) -> ParticipantDescriptor:
 @pytest.fixture
 def descriptor() -> ParticipantDescriptor:
     return make_descriptor()
+
+
+def everything(subject: str = "test") -> Grant:
+    """The operator's own grant. A description made under it is the whole participant."""
+    return root_grant(subject)
+
+
+@pytest.fixture
+def root() -> Grant:
+    return everything()

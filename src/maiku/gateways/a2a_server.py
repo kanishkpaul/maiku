@@ -88,7 +88,9 @@ class A2AGateway:
         entry = self._entry(slug)
         if entry is None:
             return None
-        return to_agent_card(entry.descriptor, base_url=f"{self.base_url}/agents/{slug}")
+        return to_agent_card(
+            entry.descriptor, self.session.root_grant, base_url=f"{self.base_url}/agents/{slug}"
+        )
 
     def _aggregate_card(self) -> dict[str, Any]:
         """One card for the whole workspace, each participant's affordances as skills."""

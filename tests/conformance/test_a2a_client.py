@@ -1,5 +1,4 @@
 """A remote A2A agent, ingested."""
-
 import base64
 import json
 
@@ -12,6 +11,7 @@ from maiku.descriptor.enums import AffordanceKind, Kind, Residency
 from maiku.runtime.artifacts import ArtifactStore, ScopedArtifacts
 from maiku.wire.events import ArtifactWritten, Failed
 from tests.conformance.contract import AdapterContract, drain
+from tests.conftest import everything
 
 AGENT = "https://agent.test"
 CARD = {
@@ -182,14 +182,14 @@ async def test_an_ingested_agent_projects_back_out_to_a2a():
     from maiku.projections import a2a, mcp
 
     descriptor = await (await agent()).describe()
-    card = a2a.to_agent_card(descriptor, base_url=f"{AGENT}/a2a")
+    card = a2a.to_agent_card(descriptor, everything(), base_url=f"{AGENT}/a2a")
 
     assert card["name"] == CARD["name"]
     assert {s["id"] for s in card["skills"]} == {s["id"] for s in CARD["skills"]}
     assert card["capabilities"]["streaming"] is True
 
     # And the same agent is now callable as MCP tools, which A2A alone cannot express.
-    assert {t["_meta"]["maiku/affordance"] for t in mcp.to_tools(descriptor)} == {
+    assert {t["_meta"]["maiku/affordance"] for t in mcp.to_tools(descriptor, everything())} == {
         "search",
         "summarise",
     }

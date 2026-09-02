@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from maiku.descriptor.enums import SideEffect
-from maiku.runtime.delegate import delegate
+from maiku.runtime.delegate import delegate, toolset
 from maiku.runtime.grants import Capability
 from maiku.runtime.workspace import Workspace
 
@@ -157,8 +157,24 @@ async def test_two_calls_in_one_turn_both_run(session):
     assert all(step.ok for step in outcome.steps)
 
 
+async def test_a_grant_decides_what_the_model_is_even_offered(session):
+    """The grant is what makes a tool exist for this caller, not a filter applied later."""
+    grant = session.grant(
+        "planner",
+        capabilities=[
+            Capability.parse("ollama/planner#chat"),
+            Capability.parse("test/sample#fetch"),
+        ],
+        max_side_effect=SideEffect.READ,
+        scopes=set(),
+    )
+    _, routes = toolset(session.participants(), exclude={"ollama/planner"}, grant=grant)
+    assert "test_sample__fetch" in routes
+    assert "test_effects__publish" not in routes
+
+
 async def test_a_grant_stops_a_delegated_call(session):
-    """The model may ask; the grant decides. This is the whole point."""
+    """The model may ask for what it was never shown; the grant still decides."""
     session.grant(
         "planner",
         capabilities=[
@@ -173,7 +189,6 @@ async def test_a_grant_stops_a_delegated_call(session):
 
     outcome = await delegate(session, "ollama/planner", "publish it", caller="planner")
 
-    assert outcome.steps[0].error.startswith("denied")
     assert not outcome.steps[0].ok
     assert outcome.answer == "I was not allowed to."
 

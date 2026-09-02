@@ -11,6 +11,7 @@ from maiku.adapters.context import CallContext
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.projections import a2a, mcp, openai_tools
 from maiku.wire.events import Failed, Finished, Started, is_terminal
+from tests.conftest import everything
 
 
 async def drain(adapter: Adapter, affordance: str, arguments: dict, ctx: CallContext) -> list:
@@ -82,14 +83,14 @@ class AdapterContract:
     async def test_descriptor_projects_to_the_ecosystem(self, adapter):
         descriptor = await adapter.describe()
 
-        tools = mcp.to_tools(descriptor)
+        tools = mcp.to_tools(descriptor, everything())
         assert len(tools) == len(descriptor.affordances)
         assert all(tool["name"].isidentifier() for tool in tools)
         assert all(tool["_meta"]["maiku/participant"] == descriptor.handle for tool in tools)
 
-        assert len(openai_tools.to_tools(descriptor)) == len(descriptor.affordances)
+        assert len(openai_tools.to_tools(descriptor, everything())) == len(descriptor.affordances)
 
-        card = a2a.to_agent_card(descriptor)
+        card = a2a.to_agent_card(descriptor, everything())
         assert len(card["skills"]) == len(descriptor.affordances)
 
     async def test_extra_arguments_are_rejected_by_the_contract(self, adapter, sample_call):

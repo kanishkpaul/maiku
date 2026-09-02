@@ -1,4 +1,5 @@
 """The real example, exercised as far as the machine allows.
+from tests.conftest import everything
 
 The CNN half runs anywhere torch and trained weights are present. The LLM half needs a
 llama.cpp server on :8081 and skips without one, because a demo that silently stubs the
@@ -10,6 +11,7 @@ import pytest
 from examples.real import cnn
 
 from maiku.runtime.workspace import Workspace
+from tests.conftest import everything
 
 CNN_URI = "python:examples.real.participants"
 LLM_URI = "openai:cassia?base=http://127.0.0.1:8081/v1"
@@ -54,7 +56,7 @@ async def test_the_cnn_projects_to_mcp_as_a_classifier(session):
     from maiku.projections import mcp
 
     descriptor = session.workspace.registry.get("local/digits").descriptor
-    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor)}
+    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor, everything())}
 
     assert tools["classify"]["annotations"]["readOnlyHint"] is True
     assert tools["classify"]["inputSchema"]["required"] == ["image"]

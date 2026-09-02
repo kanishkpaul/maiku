@@ -1,5 +1,4 @@
 """Driven against a real MCP server subprocess, not a mock."""
-
 import sys
 
 import pytest
@@ -10,6 +9,7 @@ from maiku.descriptor.enums import Kind, Residency, SideEffect
 from maiku.runtime.artifacts import ArtifactStore, ScopedArtifacts
 from maiku.wire.events import ArtifactWritten, Failed
 from tests.conformance.contract import AdapterContract, drain
+from tests.conftest import everything
 
 SERVER = f"mcp:{sys.executable} -u tests/fixtures/mcp_server.py"
 
@@ -112,7 +112,7 @@ async def test_mcp_survives_a_round_trip_through_maiku(adapter):
     from maiku.projections import a2a, mcp
 
     descriptor = await adapter.describe()
-    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor)}
+    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor, everything())}
 
     assert tools["read_file"]["annotations"]["readOnlyHint"] is True
     assert tools["read_file"]["annotations"]["idempotentHint"] is True
@@ -120,7 +120,7 @@ async def test_mcp_survives_a_round_trip_through_maiku(adapter):
     assert tools["read_file"]["inputSchema"]["required"] == ["path"]
 
     # And the same participant now speaks a protocol MCP has no notion of.
-    card = a2a.to_agent_card(descriptor, base_url="https://host/a2a")
+    card = a2a.to_agent_card(descriptor, everything(), base_url="https://host/a2a")
     assert {s["id"] for s in card["skills"]} == set(tools)
 
 

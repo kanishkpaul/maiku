@@ -5,12 +5,16 @@ The behavioural hints translate exactly, which is the point: a participant that 
 that fact by hand.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from maiku.descriptor.affordance import Affordance
 from maiku.descriptor.enums import SideEffect
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.projections.naming import flatten
+from maiku.projections.visible import visible
+
+if TYPE_CHECKING:
+    from maiku.runtime.grants import Grant
 
 READ_ONLY = frozenset({SideEffect.NONE, SideEffect.READ})
 
@@ -26,7 +30,7 @@ def annotations(affordance: Affordance) -> dict[str, Any]:
     }
 
 
-def to_tool(descriptor: ParticipantDescriptor, affordance: Affordance) -> dict[str, Any]:
+def _tool(descriptor: ParticipantDescriptor, affordance: Affordance) -> dict[str, Any]:
     description = affordance.description or affordance.summary
     if descriptor.display.description:
         description = f"{description}\n\nProvided by {descriptor.display.name}."
@@ -49,5 +53,5 @@ def to_tool(descriptor: ParticipantDescriptor, affordance: Affordance) -> dict[s
     return tool
 
 
-def to_tools(descriptor: ParticipantDescriptor) -> list[dict[str, Any]]:
-    return [to_tool(descriptor, a) for a in descriptor.affordances]
+def to_tools(descriptor: ParticipantDescriptor, grant: "Grant") -> list[dict[str, Any]]:
+    return [_tool(descriptor, a) for a in visible(descriptor, grant)]

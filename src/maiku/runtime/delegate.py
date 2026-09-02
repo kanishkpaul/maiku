@@ -15,7 +15,8 @@ from typing import Any
 
 from maiku.projections.naming import flatten
 from maiku.projections.openai_tools import to_tools
-from maiku.runtime.grants import Denied
+from maiku.projections.visible import visible
+from maiku.runtime.grants import Denied, Grant
 from maiku.runtime.registry import Entry
 from maiku.runtime.session import CallFailed, Session
 
@@ -50,16 +51,22 @@ class Delegation:
 Routes = dict[str, tuple[str, str]]
 
 
-def toolset(entries: list[Entry], exclude: set[str]) -> tuple[list[dict[str, Any]], Routes]:
-    """Tool schemas for the model, and the routing table to turn a call back into a call."""
+def toolset(
+    entries: list[Entry], exclude: set[str], grant: Grant
+) -> tuple[list[dict[str, Any]], Routes]:
+    """Tool schemas for the model, and the routing table to turn a call back into a call.
+
+    Projected through the delegating caller's own grant, so a model is never shown a tool
+    the call it would make is going to refuse.
+    """
     tools: list[dict[str, Any]] = []
     routes: Routes = {}
 
     for entry in entries:
         if entry.handle in exclude:
             continue
-        tools.extend(to_tools(entry.descriptor))
-        for affordance in entry.descriptor.affordances:
+        tools.extend(to_tools(entry.descriptor, grant))
+        for affordance in visible(entry.descriptor, grant):
             routes[flatten(entry.handle, affordance.name)] = (entry.handle, affordance.name)
     return tools, routes
 
@@ -93,7 +100,7 @@ async def delegate(
 
     everyone = session.participants()
     chosen = [e for e in everyone if using is None or e.handle in using]
-    tools, routes = toolset(chosen, exclude={model})
+    tools, routes = toolset(chosen, exclude={model}, grant=grant)
 
     messages: list[dict[str, Any]] = []
     if system:

@@ -1,5 +1,4 @@
 """The stress test: a participant whose currency is arrays and files, not text."""
-
 import numpy as np
 import pytest
 
@@ -10,6 +9,7 @@ from maiku.gateways.mcp_server import MCPGateway
 from maiku.projections import a2a, mcp
 from maiku.runtime.workspace import Workspace
 from maiku.wire import tensors
+from tests.conftest import everything
 
 VISION = "python:tests.fixtures.vision_module"
 
@@ -93,11 +93,11 @@ async def test_a_generated_image_comes_back_as_a_reference_not_bytes(workspace, 
 async def test_a_non_chat_model_still_projects_to_both_ecosystems(workspace):
     descriptor = workspace.registry.get("local/vision").descriptor
 
-    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor)}
+    tools = {t["_meta"]["maiku/affordance"]: t for t in mcp.to_tools(descriptor, everything())}
     assert set(tools) == {"logits", "embed", "classify_file", "render"}
     assert tools["logits"]["annotations"]["readOnlyHint"] is True
 
-    card = a2a.to_agent_card(descriptor)
+    card = a2a.to_agent_card(descriptor, everything())
     assert {s["id"] for s in card["skills"]} == set(tools)
 
 

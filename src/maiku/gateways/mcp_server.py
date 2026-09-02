@@ -41,7 +41,9 @@ class MCPGateway:
 
     def tools(self) -> list[dict[str, Any]]:
         return [
-            tool for entry in self.session.participants() for tool in to_tools(entry.descriptor)
+            tool
+            for entry in self.session.participants()
+            for tool in to_tools(entry.descriptor, self.session.root_grant)
         ]
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:

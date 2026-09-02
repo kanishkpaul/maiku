@@ -6,7 +6,7 @@ than a fabricated one. Guessing types we were never told is how a registry start
 """
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from maiku.descriptor.affordance import Affordance, Example
 from maiku.descriptor.binding import Binding
@@ -26,6 +26,10 @@ from maiku.descriptor.participant import (
     RuntimeInfo,
 )
 from maiku.projections.naming import handle_slug
+from maiku.projections.visible import visible
+
+if TYPE_CHECKING:
+    from maiku.runtime.grants import Grant
 
 PROTOCOL_VERSION = "0.3.0"
 
@@ -63,9 +67,12 @@ def _skill(affordance: Affordance, descriptor: ParticipantDescriptor) -> dict[st
     }
 
 
-def to_agent_card(descriptor: ParticipantDescriptor, base_url: str | None = None) -> dict[str, Any]:
+def to_agent_card(
+    descriptor: ParticipantDescriptor, grant: "Grant", base_url: str | None = None
+) -> dict[str, Any]:
     binding = descriptor.bindings[0]
     url = base_url or binding.uri or f"urn:maiku:{descriptor.handle}"
+    skills = visible(descriptor, grant)
 
     return {
         "protocolVersion": PROTOCOL_VERSION,
@@ -79,13 +86,13 @@ def to_agent_card(descriptor: ParticipantDescriptor, base_url: str | None = None
             "url": descriptor.provenance.source_uri or url,
         },
         "capabilities": {
-            "streaming": any(a.streaming for a in descriptor.affordances),
+            "streaming": any(a.streaming for a in skills),
             "pushNotifications": False,
             "stateTransitionHistory": True,
         },
         "defaultInputModes": descriptor.io_defaults.input_modes,
         "defaultOutputModes": descriptor.io_defaults.output_modes,
-        "skills": [_skill(a, descriptor) for a in descriptor.affordances],
+        "skills": [_skill(a, descriptor) for a in skills],
         "supportsAuthenticatedExtendedCard": False,
         "_meta": {"maiku/handle": descriptor.handle, "maiku/id": descriptor.id},
     }

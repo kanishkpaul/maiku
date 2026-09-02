@@ -14,12 +14,13 @@ from maiku.adapters.registry import known_schemes
 from maiku.adapters.uri import InvalidURI
 from maiku.cli import render
 from maiku.cli.args import collect
-from maiku.descriptor.enums import Kind
+from maiku.descriptor.enums import Kind, SideEffect
 from maiku.gateways.a2a_server import WELL_KNOWN, A2AGateway
 from maiku.gateways.http_server import run as run_http
 from maiku.gateways.mcp_server import MCPGateway
 from maiku.projections import a2a, mcp, openai_tools
 from maiku.runtime.escalation import route_to
+from maiku.runtime.grants import WILDCARD, Capability, Grant, root_grant
 from maiku.runtime.registry import UnknownParticipant
 from maiku.runtime.workspace import Workspace
 from maiku.wire.events import Delta, Failed, Finished
@@ -31,6 +32,15 @@ app = typer.Typer(
     add_completion=False,
 )
 
+GrantOption = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--grant",
+        help="A capability the caller holds, e.g. 'ns/name#affordance'. Repeatable. "
+        "Omit to describe as the local operator, who holds everything.",
+    ),
+]
+
 HomeOption = Annotated[
     Path | None, typer.Option("--home", help="Workspace directory (default: ~/.maiku)")
 ]
@@ -38,6 +48,24 @@ HomeOption = Annotated[
 
 def workspace(home: Path | None = None) -> Workspace:
     return Workspace(home)
+
+
+def grant_from(specs: list[str] | None) -> Grant:
+    """What a description is relative to.
+
+    A local operator holds everything, so the default shows the whole participant.
+    `--grant` answers the question Rule 2 makes askable: what would a caller holding only
+    these capabilities be able to see at all?
+    """
+    if not specs:
+        return root_grant("operator")
+    return Grant(
+        issuer="operator",
+        subject="caller",
+        capabilities=[Capability.parse(spec) for spec in specs],
+        scopes={WILDCARD},
+        max_side_effect=SideEffect.IRREVERSIBLE,
+    )
 
 
 def fail(message: str) -> None:
@@ -84,18 +112,20 @@ def list_participants(
 def describe(
     handle: str,
     fmt: Annotated[str, typer.Option("--as", help="maiku | json | mcp | a2a | openai")] = "maiku",
+    grant_spec: GrantOption = None,
     home: HomeOption = None,
 ) -> None:
     """Show a participant, optionally projected into another ecosystem's format."""
     with workspace(home) as ws:
         descriptor = _lookup(ws, handle).descriptor
+    grant = grant_from(grant_spec)
 
     views: dict[str, Any] = {
         "maiku": lambda: render.detail(descriptor),
         "json": lambda: render.as_json(descriptor.model_dump(mode="json")),
-        "mcp": lambda: render.as_json(mcp.to_tools(descriptor)),
-        "a2a": lambda: render.as_json(a2a.to_agent_card(descriptor)),
-        "openai": lambda: render.as_json(openai_tools.to_tools(descriptor)),
+        "mcp": lambda: render.as_json(mcp.to_tools(descriptor, grant)),
+        "a2a": lambda: render.as_json(a2a.to_agent_card(descriptor, grant)),
+        "openai": lambda: render.as_json(openai_tools.to_tools(descriptor, grant)),
     }
     if fmt not in views:
         fail(f"unknown format {fmt!r}; try: {', '.join(views)}")
