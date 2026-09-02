@@ -15,6 +15,8 @@ from maiku.adapters.uri import InvalidURI
 from maiku.cli import render
 from maiku.cli.args import collect
 from maiku.descriptor.enums import Kind, SideEffect
+from maiku.discovery.assemble import NothingReadable
+from maiku.discovery.base import InvalidAddress
 from maiku.gateways.a2a_server import WELL_KNOWN, A2AGateway
 from maiku.gateways.http_server import run as run_http
 from maiku.gateways.mcp_server import MCPGateway
@@ -319,7 +321,7 @@ def _run(coro: Any) -> None:
         asyncio.run(coro)
     except KeyboardInterrupt:
         raise typer.Exit(130) from None
-    except (AdapterError, InvalidURI) as exc:
+    except (AdapterError, InvalidURI, NothingReadable, InvalidAddress) as exc:
         fail(f"error: {exc}")
 
 

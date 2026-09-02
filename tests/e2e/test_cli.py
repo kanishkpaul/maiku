@@ -80,6 +80,13 @@ def test_adapting_something_absent_is_a_sentence_not_a_traceback(home):
     assert "cannot import" in result.output
 
 
+def test_discovery_failure_is_a_sentence_not_a_traceback(home):
+    result = run("add", "auto:http://127.0.0.1:1", *home)
+    assert result.exit_code == 1
+    assert "Traceback" not in result.output
+    assert "nothing at http://127.0.0.1:1 could be read" in result.output
+
+
 def test_unknown_scheme_is_reported(home):
     result = run("add", "telepathy:brain", *home)
     assert result.exit_code == 1
