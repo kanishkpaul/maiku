@@ -15,6 +15,7 @@ from maiku.adapters.uri import InvalidURI
 from maiku.cli import render
 from maiku.cli.args import collect
 from maiku.descriptor.enums import Kind, SideEffect
+from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.discovery.assemble import NothingReadable
 from maiku.discovery.base import InvalidAddress
 from maiku.gateways.a2a_server import WELL_KNOWN, A2AGateway
@@ -110,9 +111,14 @@ def list_participants(
     with workspace(home) as ws:
         entries = ws.registry.list(kind=kind, online=online)
         typer.echo(render.listing(entries))
+        if ws.registry.rederived:
+            for handle, (old_id, new_id) in sorted(ws.registry.rederived.items()):
+                msg = f"notice: re-derived identity for {handle} ({old_id} -> {new_id})"
+                typer.secho(msg, fg=typer.colors.YELLOW, err=True)
         if ws.registry.unreadable:
             for handle, reason in sorted(ws.registry.unreadable.items()):
-                msg = f"warning: could not read {handle}: {reason}"
+                short_reason = reason.splitlines()[0]
+                msg = f"warning: could not read {handle}: {short_reason}"
                 typer.secho(msg, fg=typer.colors.YELLOW, err=True)
 
 
@@ -137,9 +143,23 @@ def describe(
     vis = visible(descriptor, grant)
 
     def _json_view() -> str:
-        d = descriptor.model_dump(mode="json")
-        d["affordances"] = [a.model_dump(mode="json") for a in vis]
-        return render.as_json(d)
+        if not vis:
+            return render.as_json({})
+        narrowed = ParticipantDescriptor(
+            handle=descriptor.handle,
+            kind=descriptor.kind,
+            display=descriptor.display,
+            provenance=descriptor.provenance,
+            runtime=descriptor.runtime,
+            affordances=vis,
+            bindings=descriptor.bindings,
+            io_defaults=descriptor.io_defaults,
+            artifacts=descriptor.artifacts,
+            permissions=descriptor.permissions,
+            liveness=descriptor.liveness,
+            extensions=descriptor.extensions,
+        )
+        return render.as_json(narrowed.model_dump(mode="json"))
 
     views: dict[str, Any] = {
         "maiku": lambda: render.detail(descriptor, affordances=vis),

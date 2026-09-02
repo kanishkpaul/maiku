@@ -200,3 +200,56 @@ def test_describe_warns_on_mistyped_grant_spec(stocked):
     result = run("describe", "test/sample", "--as", "mcp", "--grant", "test/sampl#fetch", *stocked)
     assert result.exit_code == 0
     assert "note: --grant spec does not mention participant 'test/sample'" in result.output
+
+
+def test_describe_json_with_grant_roundtrips_descriptor(stocked):
+    from maiku.descriptor import ParticipantDescriptor
+
+    json_res = run(
+        "describe", "test/sample", "--as", "json", "--grant", "test/sample#fetch", *stocked
+    )
+    assert json_res.exit_code == 0
+    payload = json.loads(json_res.stdout)
+    rel_desc = ParticipantDescriptor(**payload)
+    assert rel_desc.id == payload["id"]
+
+
+def test_ls_prints_single_warning_line_per_unreadable_row(stocked):
+    import sqlite3
+    from pathlib import Path
+
+    db_path = Path(stocked[1]) / "registry.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE participants SET descriptor = '{\"kind\": \"nope\"}'")
+    conn.commit()
+    conn.close()
+
+    result = run("ls", *stocked)
+    assert result.exit_code == 0
+    warnings = [line for line in result.output.splitlines() if "warning: could not read" in line]
+    assert len(warnings) == 1
+    assert "validation error" in warnings[0]
+
+
+def test_ls_prints_rederived_notice(stocked):
+    import sqlite3
+    from pathlib import Path
+
+    db_path = Path(stocked[1]) / "registry.sqlite"
+    conn = sqlite3.connect(db_path)
+    cur = conn.execute(
+        "SELECT descriptor FROM participants WHERE handle = 'test/sample'"
+    )
+    row_json = cur.fetchone()[0]
+    data = json.loads(row_json)
+    data["id"] = "mk:" + "a" * 32
+    conn.execute(
+        "UPDATE participants SET descriptor = ? WHERE handle = 'test/sample'",
+        (json.dumps(data),),
+    )
+    conn.commit()
+    conn.close()
+
+    result = run("ls", *stocked)
+    assert result.exit_code == 0
+    assert "notice: re-derived identity for test/sample" in result.output
