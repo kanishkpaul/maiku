@@ -1,8 +1,9 @@
+import json
 import sqlite3
 
 import pytest
 
-from maiku.descriptor import Affordance, Binding, Transport
+from maiku.descriptor import Affordance, Binding, ParticipantDescriptor, Transport
 from maiku.descriptor.enums import Kind
 from maiku.runtime.registry import Registry, UnknownParticipant, searchable_text
 from maiku.wire.health import Health
@@ -252,4 +253,50 @@ def test_init_failure_does_not_leak_connection(tmp_path, monkeypatch):
     # Should be able to open/connect sqlite file without "database is locked"
     conn = sqlite3.connect(path)
     conn.close()
+
+
+def test_old_binding_affordances_reads_back_as_serves_everything(tmp_path, descriptor):
+    path = tmp_path / "registry.sqlite"
+    row = descriptor.model_dump(mode="json")
+    row["bindings"][0]["affordances"] = []
+
+    # Direct descriptor validation from old serialized model
+    revived = ParticipantDescriptor.model_validate(row)
+    assert revived.bindings[0].affordances is None
+    assert revived.bindings[0].serves("classify") is True
+
+    with Registry(path) as r:
+        r.add(descriptor, "u")
+        r._db.execute(
+            "UPDATE participants SET descriptor = ? WHERE handle = ?",
+            (json.dumps(row), descriptor.handle),
+        )
+        r._db.commit()
+
+    with Registry(path) as r:
+        entry = r.get(descriptor.handle)
+        assert entry.descriptor.bindings[0].affordances is None
+        assert entry.descriptor.bindings[0].serves("classify") is True
+
+
+def test_stale_identity_rewrite_is_tracked_in_rederived(tmp_path, descriptor):
+    import json
+
+    path = tmp_path / "registry.sqlite"
+    row = descriptor.model_dump(mode="json")
+    old_id = "mk:" + "a" * 32
+    row["id"] = old_id
+
+    with Registry(path) as r:
+        r.add(descriptor, "u")
+        r._db.execute(
+            "UPDATE participants SET descriptor = ? WHERE handle = ?",
+            (json.dumps(row), descriptor.handle),
+        )
+        r._db.commit()
+
+    with Registry(path) as r:
+        r.list()
+        assert descriptor.handle in r.rederived
+        assert r.rederived[descriptor.handle] == (old_id, descriptor.id)
 

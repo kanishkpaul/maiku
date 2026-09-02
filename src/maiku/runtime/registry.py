@@ -10,10 +10,12 @@ coroutines would buy nothing but noise at every call site.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -117,6 +119,7 @@ class Registry:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._unreadable: dict[str, str] = {}
+        self._rederived: dict[str, tuple[str, str]] = {}
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         try:
@@ -131,6 +134,10 @@ class Registry:
     @property
     def unreadable(self) -> dict[str, str]:
         return dict(self._unreadable)
+
+    @property
+    def rederived(self) -> dict[str, tuple[str, str]]:
+        return dict(self._rederived)
 
     def _migrate(self) -> None:
         """Bring a registry written before capability ids up to the current columns.
@@ -335,32 +342,53 @@ class Registry:
         return [row["handle"] for row in self._db.execute("SELECT handle FROM participants")]
 
     def _parse_descriptor(self, handle: str, descriptor_json: str) -> ParticipantDescriptor:
-        try:
-            return ParticipantDescriptor.model_validate_json(descriptor_json)
-        except ValidationError:
+        old_id: str | None = None
+        data: dict[str, Any] | None = None
+        with contextlib.suppress(Exception):
+            data = json.loads(descriptor_json)
+
+        binding_migrated = False
+        if isinstance(data, dict) and "bindings" in data and isinstance(data["bindings"], list):
+            b_affs = [b.get("affordances") for b in data["bindings"] if isinstance(b, dict)]
+            if b_affs and all(a == [] for a in b_affs):
+                for b in data["bindings"]:
+                    if isinstance(b, dict) and b.get("affordances") == []:
+                        b["affordances"] = None
+                binding_migrated = True
+
+        if not binding_migrated:
             try:
-                data = json.loads(descriptor_json)
-                if isinstance(data, dict) and "id" in data:
-                    data.pop("id")
-                    descriptor = ParticipantDescriptor.model_validate(data)
-                    sql = (
-                        "UPDATE participants SET content_id = ?, capability_id = ?, "
-                        "descriptor = ? WHERE handle = ?"
-                    )
-                    self._db.execute(
-                        sql,
-                        (
-                            descriptor.id,
-                            descriptor.capability_id,
-                            descriptor.model_dump_json(),
-                            handle,
-                        ),
-                    )
-                    self._db.commit()
-                    return descriptor
+                return ParticipantDescriptor.model_validate_json(descriptor_json)
+            except ValidationError:
+                pass
+
+        if isinstance(data, dict):
+            old_id = data.pop("id", None)
+            try:
+                descriptor = ParticipantDescriptor.model_validate(data)
+                sql = (
+                    "UPDATE participants SET content_id = ?, capability_id = ?, "
+                    "descriptor = ? WHERE handle = ?"
+                )
+                self._db.execute(
+                    sql,
+                    (
+                        descriptor.id,
+                        descriptor.capability_id,
+                        descriptor.model_dump_json(),
+                        handle,
+                    ),
+                )
+                self._db.commit()
+                if old_id and old_id != descriptor.id:
+                    self._rederived[handle] = (old_id, descriptor.id)
+                elif binding_migrated:
+                    self._rederived[handle] = (old_id or descriptor.id, descriptor.id)
+                return descriptor
             except Exception:
                 pass
-            raise
+
+        return ParticipantDescriptor.model_validate_json(descriptor_json)
 
     def _entry(self, row: sqlite3.Row) -> Entry:
         return Entry(

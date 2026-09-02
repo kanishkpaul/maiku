@@ -188,6 +188,18 @@ class ParticipantDescriptor(BaseModel):
             )
         return instance
 
+    @model_validator(mode="after")
+    def _normalize_old_bindings(self) -> "ParticipantDescriptor":
+        """Normalize descriptors written when `Binding.affordances = []` meant 'serves all'.
+
+        In descriptors written before `affordances` became optional (`None` for serves all),
+        every binding had `affordances = []`. If all bindings are `[]`, convert them to `None`.
+        """
+        if self.bindings and all(b.affordances == [] for b in self.bindings):
+            for b in self.bindings:
+                object.__setattr__(b, "affordances", None)
+        return self
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def id(self) -> str:
