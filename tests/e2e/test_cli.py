@@ -142,3 +142,26 @@ def test_a_streamed_result_is_not_also_printed_whole(stocked, monkeypatch):
 
     assert result.exit_code == 0
     assert result.stdout.count("hello world") == 1
+
+
+def test_describe_defaults_to_the_operators_own_view(stocked):
+    tools = json.loads(run("describe", "test/sample", "--as", "mcp", *stocked).stdout)
+    assert len(tools) > 1
+
+
+def test_describe_can_ask_what_one_caller_would_see(stocked):
+    tools = json.loads(
+        run(
+            "describe", "test/sample", "--as", "mcp",
+            "--grant", "test/sample#fetch", *stocked,
+        ).stdout
+    )
+    assert [t["_meta"]["maiku/affordance"] for t in tools] == ["fetch"]
+
+
+def test_a_caller_holding_nothing_sees_an_empty_projection(stocked):
+    result = run(
+        "describe", "test/sample", "--as", "openai", "--grant", "other/thing#nope", *stocked
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
