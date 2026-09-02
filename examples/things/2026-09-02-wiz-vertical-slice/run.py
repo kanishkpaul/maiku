@@ -1,4 +1,4 @@
-"""CNN -> local language model -> human approval -> Hue write -> Hue event."""
+"""CNN -> local language model -> human approval -> WiZ write -> WiZ push event."""
 
 import argparse
 import asyncio
@@ -9,9 +9,8 @@ import time
 from contextlib import aclosing
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
-from maiku.adapters.hue import CHANGED, READ, WRITE
+from maiku.adapters.wiz import CHANGED, READ, WRITE
 from maiku.runtime.escalation import route_to
 from maiku.runtime.session import CallFailed
 from maiku.runtime.workspace import Workspace
@@ -22,16 +21,10 @@ CNN = "python:examples.real.participants"
 HUMAN = "human:reviewer?channel=cli"
 
 
-def hue_uri() -> str:
-    bridge = os.environ.get("HUE_BRIDGE_URL", "").rstrip("/")
-    if not bridge:
-        raise SystemExit("set HUE_BRIDGE_URL to the bridge's local https:// address")
-    if not os.environ.get("HUE_APPLICATION_KEY"):
-        raise SystemExit("set HUE_APPLICATION_KEY; credentials are never stored in the URI")
-    params = {"key_env": "HUE_APPLICATION_KEY"}
-    if light := os.environ.get("HUE_LIGHT_ID"):
-        params["light"] = light
-    return f"hue:{bridge}?{urlencode(params)}"
+def wiz_uri() -> str:
+    if ip := os.environ.get("WIZ_BULB_IP"):
+        return f"wiz:{ip}"
+    return "wiz:discover"
 
 
 async def watch_one_change(session: Any, handle: str) -> dict[str, Any] | None:
@@ -58,9 +51,7 @@ def write_trace(
     summary: dict[str, Any],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    records = [
-        {"record": "event", **event} for event in observed_events
-    ] + [
+    records = [{"record": "event", **event} for event in observed_events] + [
         {"record": "task", **task.model_dump(mode="json")}
         for task in session.router.tasks.values()
     ] + [{"record": "summary", **summary}]
@@ -68,15 +59,13 @@ def write_trace(
 
 
 async def main(index: int, trace_path: Path) -> int:
-    sources = [LLM, CNN, HUMAN, hue_uri()]
+    sources = [LLM, CNN, HUMAN, wiz_uri()]
     observed_events: list[dict[str, Any]] = []
 
     def observe(session_id: str, event: Event) -> None:
-        observed_events.append(
-            {"session_id": session_id, **event.model_dump(mode="json")}
-        )
+        observed_events.append({"session_id": session_id, **event.model_dump(mode="json")})
 
-    with Workspace(Path(tempfile.mkdtemp(prefix="maiku-hue-")) / "home") as workspace:
+    with Workspace(Path(tempfile.mkdtemp(prefix="maiku-wiz-")) / "home") as workspace:
         entries = []
         for source in sources:
             entry = (await workspace.add(source)).entry
@@ -86,16 +75,16 @@ async def main(index: int, trace_path: Path) -> int:
             entries.append(entry)
             print(f"adapted {entry.handle:<20} {entry.descriptor.kind.value}")
 
-        hue = next(entry for entry in entries if entry.handle.startswith("hue/"))
+        wiz = next(entry for entry in entries if entry.handle.startswith("wiz/"))
         async with workspace.session(owner="demo", observer=observe) as session:
             session.responder = route_to(session, "human/reviewer")
 
-            before = await session.result(hue.handle, READ)
+            before = await session.result(wiz.handle, READ)
             digest = await session.result("local/digits", "sample_digit", {"index": index})
             verdict = await session.result("local/digits", "classify", {"image": digest})
             proposed = {
                 "on": True,
-                "brightness": max(10.0, round(verdict["confidence"] * 100, 1)),
+                "brightness": max(26, round(verdict["confidence"] * 255)),
             }
             rationale = await session.result(
                 "openai/cassia",
@@ -104,8 +93,8 @@ async def main(index: int, trace_path: Path) -> int:
                     "prompt": (
                         f"A CNN classified handwritten digit {verdict['digit']} with "
                         f"confidence {verdict['confidence']:.1%}. In one sentence, explain "
-                        f"why a human might approve turning a status light on at "
-                        f"{proposed['brightness']}% brightness. Do not claim you saw the image."
+                        "why a human might approve turning a status light on. "
+                        "Do not claim you saw the image."
                     ),
                     "max_tokens": 80,
                 },
@@ -113,13 +102,13 @@ async def main(index: int, trace_path: Path) -> int:
 
             print(f"CNN: {verdict}")
             print(f"model: {rationale.strip()}")
-            print(f"Hue before: {before}; proposed: {proposed}")
-            print("The Hue write now routes to human/reviewer for approval.")
+            print(f"WiZ before: {before}; proposed: {proposed}")
+            print("The WiZ write now routes to human/reviewer for approval.")
 
-            watcher = asyncio.create_task(watch_one_change(session, hue.handle))
+            watcher = asyncio.create_task(watch_one_change(session, wiz.handle))
             await asyncio.sleep(0.25)
             try:
-                after = await session.result(hue.handle, WRITE, proposed)
+                after = await session.result(wiz.handle, WRITE, proposed)
             except CallFailed as exc:
                 watcher.cancel()
                 await asyncio.gather(watcher, return_exceptions=True)
@@ -144,13 +133,13 @@ async def main(index: int, trace_path: Path) -> int:
                 "approved": True,
                 "cnn": verdict,
                 "model_rationale": rationale.strip(),
-                "hue_before": before,
-                "hue_after": after,
-                "hue_event": changed,
+                "wiz_before": before,
+                "wiz_after": after,
+                "wiz_event": changed,
             }
             write_trace(trace_path, observed_events, session, summary)
-            print(f"Hue after: {after}")
-            print(f"Hue event: {changed or 'no event arrived within 10 seconds'}")
+            print(f"WiZ after: {after}")
+            print(f"WiZ event: {changed or 'no push event arrived within 10 seconds'}")
             print(f"trace: {trace_path}")
             return 0 if changed is not None else 1
 
@@ -161,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--trace",
         type=Path,
-        default=Path(tempfile.gettempdir()) / f"maiku-hue-{int(time.time())}.jsonl",
+        default=Path(tempfile.gettempdir()) / f"maiku-wiz-{int(time.time())}.jsonl",
     )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(main(args.index, args.trace)))

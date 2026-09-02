@@ -19,7 +19,6 @@ BUILTIN_SCHEMES: dict[str, str] = {
     "hf": "maiku.adapters.hf_pipeline",
     "http": "maiku.adapters.http_api",
     "human": "maiku.adapters.human",
-    "hue": "maiku.adapters.hue",
     "mcp": "maiku.adapters.mcp_client",
     "lmstudio": "maiku.adapters.openai_compat",
     "ollama": "maiku.adapters.openai_compat",
@@ -28,6 +27,7 @@ BUILTIN_SCHEMES: dict[str, str] = {
     "python": "maiku.adapters.python_fn",
     "torch": "maiku.adapters.torch_model",
     "vllm": "maiku.adapters.openai_compat",
+    "wiz": "maiku.adapters.wiz",
 }
 
 _registered: dict[str, type["Adapter"]] = {}

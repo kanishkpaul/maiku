@@ -53,8 +53,8 @@ Two worked examples:
   stops for human approval.
 - [`examples/triage`](examples/triage/README.md) — five participants on one task, including
   the moment the runtime refuses an over-reaching call.
-- [`examples/things/2026-09-02-hue-vertical-slice`](examples/things/2026-09-02-hue-vertical-slice/README.md)
-  — a CNN, local language model, person and real Hue light through one governed trace.
+- [`examples/things/2026-09-02-wiz-vertical-slice`](examples/things/2026-09-02-wiz-vertical-slice/README.md)
+  — a CNN, local language model, person and real WiZ light through one governed trace.
 
 ## The model
 
@@ -97,7 +97,7 @@ Bounded delegation is the thing MCP, A2A and ACP all leave to trust.
 | `torch` | an `nn.Module` or TorchScript file | `torch:mypkg:Model` |
 | `hf` | a Hugging Face pipeline | `hf:openai/whisper-tiny?task=automatic-speech-recognition` |
 | `human` | a person | `human:you?channel=cli` |
-| `hue` | a Philips Hue CLIP v2 light | `hue:https://bridge.local?light=<id>` |
+| `wiz` | a WiZ Connected light over its local UDP API | `wiz:discover` or `wiz:192.168.1.50` |
 
 Descriptors are **derived**, not written. A Python signature becomes an input schema, a
 docstring becomes the summary, a generator becomes a streaming affordance, an OpenAPI

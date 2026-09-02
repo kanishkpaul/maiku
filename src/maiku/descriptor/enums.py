@@ -106,6 +106,7 @@ class Transport(StrEnum):
     JSONRPC = "jsonrpc"
     SUBPROCESS = "subprocess"
     TTY = "tty"
+    UDP = "udp"
 
 
 class Approval(StrEnum):

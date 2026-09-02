@@ -715,7 +715,8 @@
         "grpc",
         "jsonrpc",
         "subprocess",
-        "tty"
+        "tty",
+        "udp"
       ],
       "title": "Transport",
       "type": "string"
