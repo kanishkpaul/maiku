@@ -105,7 +105,12 @@ def list_participants(
 ) -> None:
     """List everything adapted so far."""
     with workspace(home) as ws:
-        typer.echo(render.listing(ws.registry.list(kind=kind, online=online)))
+        entries = ws.registry.list(kind=kind, online=online)
+        typer.echo(render.listing(entries))
+        if ws.registry.unreadable:
+            for handle, reason in sorted(ws.registry.unreadable.items()):
+                msg = f"warning: could not read {handle}: {reason}"
+                typer.secho(msg, fg=typer.colors.YELLOW, err=True)
 
 
 @app.command()

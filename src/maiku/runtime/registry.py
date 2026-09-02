@@ -10,11 +10,12 @@ coroutines would buy nothing but noise at every call site.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from maiku.descriptor.enums import Kind
 from maiku.descriptor.participant import ParticipantDescriptor
@@ -115,12 +116,21 @@ class Registry:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._unreadable: dict[str, str] = {}
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
-        self._migrate()
-        self._db.executescript(SCHEMA)
-        self._fts = self._try_fts()
-        self._db.commit()
+        try:
+            self._migrate()
+            self._db.executescript(SCHEMA)
+            self._fts = self._try_fts()
+            self._db.commit()
+        except Exception:
+            self._db.close()
+            raise
+
+    @property
+    def unreadable(self) -> dict[str, str]:
+        return dict(self._unreadable)
 
     def _migrate(self) -> None:
         """Bring a registry written before capability ids up to the current columns.
@@ -129,18 +139,30 @@ class Registry:
         answers `by_capability_id` correctly instead of answering it with silence.
         """
         columns = {row["name"] for row in self._db.execute("PRAGMA table_info(participants)")}
-        if not columns or "capability_id" in columns:
+        if columns and "capability_id" not in columns:
+            self._db.execute(
+                "ALTER TABLE participants ADD COLUMN capability_id TEXT NOT NULL DEFAULT ''"
+            )
+            self._db.commit()
+
+        if not columns:
             return
 
-        self._db.execute(
-            "ALTER TABLE participants ADD COLUMN capability_id TEXT NOT NULL DEFAULT ''"
+        sql = (
+            "SELECT handle, descriptor FROM participants "
+            "WHERE capability_id = '' OR capability_id IS NULL"
         )
-        for row in self._db.execute("SELECT handle, descriptor FROM participants").fetchall():
-            descriptor = ParticipantDescriptor.model_validate_json(row["descriptor"])
-            self._db.execute(
-                "UPDATE participants SET capability_id = ? WHERE handle = ?",
-                (descriptor.capability_id, row["handle"]),
-            )
+        for row in self._db.execute(sql).fetchall():
+            handle = row["handle"]
+            try:
+                descriptor = self._parse_descriptor(handle, row["descriptor"])
+                self._db.execute(
+                    "UPDATE participants SET capability_id = ? WHERE handle = ?",
+                    (descriptor.capability_id, handle),
+                )
+            except Exception as exc:
+                self._unreadable[handle] = str(exc)
+        self._db.commit()
 
     def _try_fts(self) -> bool:
         try:
@@ -218,7 +240,11 @@ class Registry:
         row = self._db.execute("SELECT * FROM participants WHERE handle = ?", (handle,)).fetchone()
         if row is None:
             raise UnknownParticipant(handle)
-        return self._entry(row)
+        try:
+            return self._entry(row)
+        except Exception as exc:
+            self._unreadable[handle] = str(exc)
+            raise
 
     def by_content_id(self, content_id: str) -> list[Entry]:
         """Every handle whose descriptor hashes to this id.
@@ -229,7 +255,13 @@ class Registry:
         rows = self._db.execute(
             "SELECT * FROM participants WHERE content_id = ? ORDER BY handle", (content_id,)
         )
-        return [self._entry(row) for row in rows]
+        entries: list[Entry] = []
+        for row in rows:
+            try:
+                entries.append(self._entry(row))
+            except Exception as exc:
+                self._unreadable[row["handle"]] = str(exc)
+        return entries
 
     def by_capability_id(self, capability_id: str) -> list[Entry]:
         """Every handle affording exactly this, whatever it is called.
@@ -241,7 +273,13 @@ class Registry:
             "SELECT * FROM participants WHERE capability_id = ? ORDER BY handle",
             (capability_id,),
         )
-        return [self._entry(row) for row in rows]
+        entries: list[Entry] = []
+        for row in rows:
+            try:
+                entries.append(self._entry(row))
+            except Exception as exc:
+                self._unreadable[row["handle"]] = str(exc)
+        return entries
 
     def list(self, kind: Kind | None = None, online: bool | None = None) -> list[Entry]:
         sql = "SELECT * FROM participants"
@@ -251,7 +289,13 @@ class Registry:
             params.append(kind.value)
         sql += " ORDER BY handle"
 
-        entries = [self._entry(row) for row in self._db.execute(sql, params)]
+        entries: list[Entry] = []
+        for row in self._db.execute(sql, params):
+            try:
+                entries.append(self._entry(row))
+            except Exception as exc:
+                self._unreadable[row["handle"]] = str(exc)
+
         if online is None:
             return entries
         return [e for e in entries if e.online is online]
@@ -272,7 +316,13 @@ class Registry:
                 "SELECT * FROM participants WHERE descriptor LIKE ? LIMIT ?",
                 (f"%{query}%", limit),
             ).fetchall()
-        return [self._entry(row) for row in rows]
+        entries: list[Entry] = []
+        for row in rows:
+            try:
+                entries.append(self._entry(row))
+            except Exception as exc:
+                self._unreadable[row["handle"]] = str(exc)
+        return entries
 
     def record_health(self, handle: str, health: Health) -> None:
         self._db.execute(
@@ -284,10 +334,37 @@ class Registry:
     def handles(self) -> list[str]:
         return [row["handle"] for row in self._db.execute("SELECT handle FROM participants")]
 
-    @staticmethod
-    def _entry(row: sqlite3.Row) -> Entry:
+    def _parse_descriptor(self, handle: str, descriptor_json: str) -> ParticipantDescriptor:
+        try:
+            return ParticipantDescriptor.model_validate_json(descriptor_json)
+        except ValidationError:
+            try:
+                data = json.loads(descriptor_json)
+                if isinstance(data, dict) and "id" in data:
+                    data.pop("id")
+                    descriptor = ParticipantDescriptor.model_validate(data)
+                    sql = (
+                        "UPDATE participants SET content_id = ?, capability_id = ?, "
+                        "descriptor = ? WHERE handle = ?"
+                    )
+                    self._db.execute(
+                        sql,
+                        (
+                            descriptor.id,
+                            descriptor.capability_id,
+                            descriptor.model_dump_json(),
+                            handle,
+                        ),
+                    )
+                    self._db.commit()
+                    return descriptor
+            except Exception:
+                pass
+            raise
+
+    def _entry(self, row: sqlite3.Row) -> Entry:
         return Entry(
-            descriptor=ParticipantDescriptor.model_validate_json(row["descriptor"]),
+            descriptor=self._parse_descriptor(row["handle"], row["descriptor"]),
             uri=row["uri"],
             health=Health.model_validate_json(row["health"]) if row["health"] else None,
             first_seen=row["first_seen"],

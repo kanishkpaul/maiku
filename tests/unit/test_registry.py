@@ -153,3 +153,103 @@ def test_searchable_text_includes_affordance_prose(descriptor):
     text = searchable_text(descriptor)
     assert "Label a sentence positive or negative" in text
     assert "classify" in text
+
+
+def test_pre_change_descriptor_is_re_derived_on_read(tmp_path, descriptor):
+    import json
+
+    from maiku.descriptor.participant import ParticipantDescriptor
+
+    path = tmp_path / "registry.sqlite"
+    row = descriptor.model_dump(mode="json")
+    row["id"] = "mk:" + "a" * 32
+
+    with Registry(path) as r:
+        r.add(descriptor, "u")
+        r._db.execute(
+            "UPDATE participants SET descriptor = ? WHERE handle = ?",
+            (json.dumps(row), descriptor.handle),
+        )
+        r._db.commit()
+
+    with Registry(path) as r:
+        entries = r.list()
+        assert len(entries) == 1
+        assert entries[0].handle == descriptor.handle
+        assert entries[0].descriptor.id == descriptor.id
+
+    # Verify wire descriptors with tampered id are still rejected
+    row_tampered = json.dumps(row)
+    with pytest.raises(ValueError, match="does not match content hash"):
+        ParticipantDescriptor.model_validate_json(row_tampered)
+
+
+def test_unreadable_row_does_not_break_listing(tmp_path, descriptor):
+    path = tmp_path / "registry.sqlite"
+    good = descriptor
+    with Registry(path) as r:
+        r.add(good, "u1")
+        bad_insert = (
+            "INSERT INTO participants VALUES "
+            "('local/bad', 'id', 'cap', 'u2', 'agent', 'invalid json {{{', NULL, 0, 0)"
+        )
+        r._db.execute(bad_insert)
+        r._db.commit()
+
+    with Registry(path) as r:
+        entries = r.list()
+        assert [e.handle for e in entries] == [good.handle]
+        assert "local/bad" in r.unreadable
+
+        found = r.find("sentiment")
+        assert [e.handle for e in found] == [good.handle]
+
+
+def test_migration_fault_tolerant_and_re_runnable(tmp_path, descriptor):
+    import json
+    path = tmp_path / "old.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE participants (
+            handle TEXT PRIMARY KEY, content_id TEXT NOT NULL, uri TEXT NOT NULL,
+            kind TEXT NOT NULL, descriptor TEXT NOT NULL, health TEXT,
+            first_seen REAL NOT NULL, last_seen REAL NOT NULL
+        )"""
+    )
+    good_row = descriptor.model_dump(mode="json")
+    stale_row = descriptor.model_dump(mode="json")
+    stale_row["id"] = "mk:" + "a" * 32
+
+    conn.execute(
+        "INSERT INTO participants VALUES (?, ?, ?, ?, ?, NULL, 0, 0)",
+        ("local/good", descriptor.id, "u1", descriptor.kind.value, json.dumps(good_row)),
+    )
+    conn.execute(
+        "INSERT INTO participants VALUES (?, ?, ?, ?, ?, NULL, 0, 0)",
+        ("local/stale", "mk:" + "a" * 32, "u2", descriptor.kind.value, json.dumps(stale_row)),
+    )
+    conn.commit()
+    conn.close()
+
+    with Registry(path) as r:
+        assert len(r.list()) == 2
+        assert r.by_capability_id(descriptor.capability_id) != []
+
+    with Registry(path) as r:
+        assert len(r.list()) == 2
+
+
+def test_init_failure_does_not_leak_connection(tmp_path, monkeypatch):
+    path = tmp_path / "fail.sqlite"
+
+    def bad_migrate(self):
+        raise RuntimeError("migration failed")
+
+    monkeypatch.setattr(Registry, "_migrate", bad_migrate)
+    with pytest.raises(RuntimeError):
+        Registry(path)
+
+    # Should be able to open/connect sqlite file without "database is locked"
+    conn = sqlite3.connect(path)
+    conn.close()
+
