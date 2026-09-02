@@ -105,7 +105,7 @@ class A2AGateway:
         entry = self._entry(slug)
         if entry is None:
             return None
-        if self.grant is None:
+        if self.grant is None or not self._visible(entry):
             return None
         return to_agent_card(
             entry.descriptor, self.grant, base_url=f"{self.base_url}/agents/{slug}"

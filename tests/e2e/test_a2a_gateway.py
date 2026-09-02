@@ -175,3 +175,16 @@ async def test_the_agent_card_is_filtered_by_the_clients_grant(tmp_path):
 
             operator = A2AGateway(session, grant=session.root_grant)
             assert len(operator.agent_card(handle_slug("test/sample"))["skills"]) > 1
+
+
+async def test_agent_card_returns_none_when_grant_covers_no_affordances(tmp_path):
+    with Workspace(tmp_path / "home") as ws:
+        await ws.add(SAMPLE)
+        async with ws.session() as session:
+            stranger_grant = session.grant(
+                "stranger", capabilities=[Capability.parse("somewhere/else#nothing")]
+            )
+            gateway = A2AGateway(session, base_url="http://localhost:8080", grant=stranger_grant)
+            slug = handle_slug("test/sample")
+            assert gateway.agent_card(slug) is None
+            assert gateway.agent_card()["skills"] == []

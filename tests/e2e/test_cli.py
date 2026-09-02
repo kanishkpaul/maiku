@@ -165,3 +165,9 @@ def test_a_caller_holding_nothing_sees_an_empty_projection(stocked):
     )
     assert result.exit_code == 0
     assert json.loads(result.stdout) == []
+
+
+def test_serve_refuses_non_loopback_without_grant(home):
+    result = run("serve", "a2a", "--host", "0.0.0.0", *home)
+    assert result.exit_code == 1
+    assert "refusing to serve root grant on non-loopback host" in result.output

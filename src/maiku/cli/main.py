@@ -204,11 +204,20 @@ def serve(
     human: Annotated[str | None, typer.Option("--human")] = None,
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port")] = 8080,
+    grant_spec: GrantOption = None,
     home: HomeOption = None,
 ) -> None:
     """Serve every adapted participant to an external client."""
     if protocol not in {"mcp", "a2a"}:
         fail(f"unknown protocol {protocol!r}; try: mcp, a2a")
+
+    if host not in {"127.0.0.1", "localhost", "::1"} and not grant_spec:
+        fail(
+            "refusing to serve root grant on non-loopback host without explicit --grant; "
+            "bind 127.0.0.1 or pass --grant"
+        )
+
+    grant = grant_from(grant_spec)
 
     async def run() -> None:
         with workspace(home) as ws:
@@ -216,12 +225,10 @@ def serve(
                 if human:
                     session.responder = route_to(session, human)
                 if protocol == "mcp":
-                    await MCPGateway(session, grant=session.root_grant).serve_stdio()
+                    await MCPGateway(session, grant=grant).serve_stdio()
                     return
 
-                gateway = A2AGateway(
-                    session, base_url=f"http://{host}:{port}", grant=session.root_grant
-                )
+                gateway = A2AGateway(session, base_url=f"http://{host}:{port}", grant=grant)
                 typer.echo(f"a2a on http://{host}:{port}{WELL_KNOWN}", err=True)
                 await run_http(_a2a_routes(gateway), host, port)
 
