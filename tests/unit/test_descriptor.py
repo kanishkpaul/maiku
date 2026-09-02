@@ -3,6 +3,8 @@ from pydantic import ValidationError
 
 from maiku.descriptor import (
     Affordance,
+    AffordanceKind,
+    AffordanceOperation,
     Binding,
     Display,
     ParticipantDescriptor,
@@ -176,3 +178,23 @@ def test_worst_side_effect_is_the_maximum(descriptor):
 def test_content_id_is_short_and_prefixed(descriptor):
     assert content_id(descriptor) == descriptor.id
     assert len(descriptor.id) == len("mk:") + 32
+
+
+def test_legacy_invocation_descriptor_keeps_its_identity(descriptor):
+    payload = descriptor.model_dump(mode="json")
+    assert "operation" not in payload["affordances"][0]
+    assert ParticipantDescriptor(**payload).id == descriptor.id
+
+
+@pytest.mark.parametrize(
+    ("kind", "operation"),
+    [
+        (AffordanceKind.PROPERTY, None),
+        (AffordanceKind.PROPERTY, AffordanceOperation.SUBSCRIBE),
+        (AffordanceKind.EVENT, AffordanceOperation.READ),
+        (AffordanceKind.INVOKE, AffordanceOperation.WRITE),
+    ],
+)
+def test_operation_must_match_the_affordance_kind(kind, operation):
+    with pytest.raises(ValidationError, match="affordance operation"):
+        Affordance(name="state", summary="State", kind=kind, operation=operation)

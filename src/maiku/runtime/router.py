@@ -4,8 +4,8 @@ Everything a participant is allowed to do is decided here: the grant is checked 
 adapter is opened, arguments are rejected at the boundary, and a suspension mid-call is
 routed back out to whoever can answer it.
 
-Adapters stay ignorant of all of it. That is the point - an adapter author writes four
-methods, and authorization, validation, artifact scoping and human escalation come free.
+Adapters stay ignorant of all of it. That is the point: authorization, validation,
+artifact scoping and human escalation come free on every operation path.
 """
 
 import asyncio
@@ -204,6 +204,8 @@ class Router:
                 side_effects=admitted.affordance.side_effects.value,
                 detail={"arguments": arguments},
             )
+            self._absorb(admitted, request)
+            self._observe(request)
             yield request
             if not await self.responder(request):
                 yield self._terminate(
@@ -285,7 +287,13 @@ class Router:
 
         try:
             with self.tracer.span(attributes) as span:
-                async for event in guarded(adapter, affordance.name, call.arguments, ctx):
+                async for event in guarded(
+                    adapter,
+                    affordance.name,
+                    call.arguments,
+                    ctx,
+                    declared=affordance,
+                ):
                     span.record(event)
                     if isinstance(event, NeedsInput | NeedsApproval):
                         ctx.expect(event.request_id)

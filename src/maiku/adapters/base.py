@@ -1,4 +1,4 @@
-"""The adapter contract: four methods, and everything in the world fits behind them."""
+"""The adapter contract: one event discipline across calls, properties and subscriptions."""
 
 import asyncio
 import contextlib
@@ -9,6 +9,8 @@ from typing import Any, ClassVar
 
 from maiku.adapters.context import CallCancelled, CallContext
 from maiku.adapters.uri import ParticipantURI
+from maiku.descriptor.affordance import Affordance
+from maiku.descriptor.enums import AffordanceOperation
 from maiku.descriptor.participant import ParticipantDescriptor
 from maiku.descriptor.validate import argument_errors
 from maiku.wire.events import ArtifactWritten, Event, Failed, Finished, Started
@@ -74,6 +76,21 @@ class Adapter(ABC):
     ) -> AsyncIterator[Event]:
         """Run one call, as a stream ending in exactly one terminal event."""
 
+    def read_property(
+        self, affordance: str, arguments: dict[str, Any], ctx: CallContext
+    ) -> AsyncIterator[Event]:
+        return _unsupported_operation(affordance, AffordanceOperation.READ)
+
+    def write_property(
+        self, affordance: str, arguments: dict[str, Any], ctx: CallContext
+    ) -> AsyncIterator[Event]:
+        return _unsupported_operation(affordance, AffordanceOperation.WRITE)
+
+    def subscribe(
+        self, affordance: str, arguments: dict[str, Any], ctx: CallContext
+    ) -> AsyncIterator[Event]:
+        return _unsupported_operation(affordance, AffordanceOperation.SUBSCRIBE)
+
     async def descriptor(self) -> ParticipantDescriptor:
         """describe(), cached for the life of this adapter instance.
 
@@ -102,10 +119,46 @@ class Adapter(ABC):
         await self.close()
 
 
-async def guarded(
-    adapter: Adapter, affordance: str, arguments: dict[str, Any], ctx: CallContext
+async def _unsupported_operation(
+    affordance: str, operation: AffordanceOperation
 ) -> AsyncIterator[Event]:
-    """Wrap `invoke` so the stream invariant holds even when an adapter misbehaves.
+    yield UnknownAffordance(
+        f"{affordance!r} does not support the {operation.value} operation"
+    ).as_event()
+
+
+def _dispatch(
+    adapter: Adapter,
+    declared: Affordance,
+    arguments: dict[str, Any],
+    ctx: CallContext,
+) -> AsyncIterator[Event]:
+    """Select one adapter path after authorization and schema validation have succeeded.
+
+    invoke/stream -> invoke
+    property read -> read_property
+    property write -> write_property
+    event          -> subscribe
+    """
+    operation = declared.resolved_operation
+    if operation is AffordanceOperation.READ:
+        return adapter.read_property(declared.name, arguments, ctx)
+    if operation is AffordanceOperation.WRITE:
+        return adapter.write_property(declared.name, arguments, ctx)
+    if operation is AffordanceOperation.SUBSCRIBE:
+        return adapter.subscribe(declared.name, arguments, ctx)
+    return adapter.invoke(declared.name, arguments, ctx)
+
+
+async def guarded(
+    adapter: Adapter,
+    affordance: str,
+    arguments: dict[str, Any],
+    ctx: CallContext,
+    *,
+    declared: Affordance | None = None,
+) -> AsyncIterator[Event]:
+    """Wrap an operation so the stream invariant holds even when an adapter misbehaves.
 
     Also the merge point for events the adapter emits out of band via the context, so all
     stream discipline - ordering, sequencing, exactly one terminal event - lives here
@@ -122,9 +175,9 @@ async def guarded(
         seq += 1
         return event
 
-    async def pump() -> None:
+    async def pump(operation: Affordance) -> None:
         try:
-            async for event in adapter.invoke(affordance, arguments, ctx):
+            async for event in _dispatch(adapter, operation, arguments, ctx):
                 ctx._outbox.put_nowait(event)
         except CallCancelled:
             ctx._outbox.put_nowait(Finished(state=TaskState.CANCELED))
@@ -138,8 +191,8 @@ async def guarded(
     yield stamp(Started(participant=ctx.participant, affordance=affordance))
 
     try:
-        declared = (await adapter.descriptor()).affordance(affordance)
-        if problems := argument_errors(declared, arguments):
+        operation = declared or (await adapter.descriptor()).affordance(affordance)
+        if problems := argument_errors(operation, arguments):
             raise InvalidArguments(
                 f"arguments for {affordance!r} are invalid", detail={"errors": problems}
             )
@@ -150,7 +203,7 @@ async def guarded(
         yield stamp(exc.as_event())
         return
 
-    worker = asyncio.create_task(pump())
+    worker = asyncio.create_task(pump(operation))
     try:
         while True:
             item = await ctx._outbox.get()

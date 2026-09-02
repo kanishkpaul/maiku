@@ -48,6 +48,17 @@
           "title": "Name",
           "type": "string"
         },
+        "operation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AffordanceOperation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "output_schema": {
           "additionalProperties": true,
           "title": "Output Schema",
@@ -93,6 +104,17 @@
         "event"
       ],
       "title": "AffordanceKind",
+      "type": "string"
+    },
+    "AffordanceOperation": {
+      "description": "The operation a call performs within an interaction shape.\n\nA property read and property write cannot share an authorization decision: one only\nobserves state while the other changes the world. Keeping the operation explicit lets\neach appear as its own caller-relative affordance with its own schema and side effect.",
+      "enum": [
+        "invoke",
+        "read",
+        "write",
+        "subscribe"
+      ],
+      "title": "AffordanceOperation",
       "type": "string"
     },
     "Approval": {

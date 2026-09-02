@@ -33,6 +33,20 @@ class AffordanceKind(StrEnum):
     EVENT = "event"
 
 
+class AffordanceOperation(StrEnum):
+    """The operation a call performs within an interaction shape.
+
+    A property read and property write cannot share an authorization decision: one only
+    observes state while the other changes the world. Keeping the operation explicit lets
+    each appear as its own caller-relative affordance with its own schema and side effect.
+    """
+
+    INVOKE = "invoke"
+    READ = "read"
+    WRITE = "write"
+    SUBSCRIBE = "subscribe"
+
+
 class Determinism(StrEnum):
     DETERMINISTIC = "deterministic"
     STOCHASTIC = "stochastic"

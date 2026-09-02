@@ -9,6 +9,7 @@ from maiku.descriptor.canonical import (
 )
 from maiku.descriptor.enums import (
     AffordanceKind,
+    AffordanceOperation,
     Approval,
     Determinism,
     Device,
@@ -41,6 +42,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "Affordance",
     "AffordanceKind",
+    "AffordanceOperation",
     "Approval",
     "ArtifactPolicy",
     "AuthRef",

@@ -2,10 +2,11 @@
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from maiku.descriptor.enums import (
     AffordanceKind,
+    AffordanceOperation,
     Determinism,
     LatencyClass,
     SideEffect,
@@ -38,6 +39,10 @@ class Affordance(BaseModel):
     summary: str = Field(max_length=200)
     description: str = ""
     kind: AffordanceKind = AffordanceKind.INVOKE
+    operation: AffordanceOperation | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
     input_schema: dict[str, Any] = Field(default_factory=lambda: dict(EMPTY_OBJECT_SCHEMA))
     output_schema: dict[str, Any] = Field(default_factory=lambda: dict(EMPTY_OBJECT_SCHEMA))
@@ -52,6 +57,30 @@ class Affordance(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _operation_matches_kind(self) -> "Affordance":
+        allowed = {
+            AffordanceKind.INVOKE: {None, AffordanceOperation.INVOKE},
+            AffordanceKind.STREAM: {None, AffordanceOperation.INVOKE},
+            AffordanceKind.PROPERTY: {
+                AffordanceOperation.READ,
+                AffordanceOperation.WRITE,
+            },
+            AffordanceKind.EVENT: {AffordanceOperation.SUBSCRIBE},
+        }
+        if self.operation not in allowed[self.kind]:
+            expected = ", ".join(
+                sorted(operation.value for operation in allowed[self.kind] if operation is not None)
+            )
+            raise ValueError(
+                f"{self.kind.value} affordance operation must be {expected or 'invoke'}"
+            )
+        return self
+
+    @property
+    def resolved_operation(self) -> AffordanceOperation:
+        return self.operation or AffordanceOperation.INVOKE
+
     @property
     def streaming(self) -> bool:
-        return self.kind is AffordanceKind.STREAM
+        return self.kind in {AffordanceKind.STREAM, AffordanceKind.EVENT}

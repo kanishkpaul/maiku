@@ -59,6 +59,7 @@ document hashes identically across runs.
   "name": "classify",
   "summary": "Label a sentence positive or negative",
   "kind": "invoke",              // invoke | stream | property | event
+  "operation": "invoke",         // optional for invoke/stream; required otherwise
   "input_schema":  { /* JSON Schema 2020-12 */ },
   "output_schema": { /* JSON Schema 2020-12 */ },
   "examples": [{ "input": {...}, "output": {...} }],
@@ -73,6 +74,12 @@ document hashes identically across runs.
 
 The four kinds come from [W3C WoT](https://www.w3.org/TR/wot-thing-description11/). A
 classifier invokes, an LLM streams, a robot joint is a property, a monitor emits events.
+
+Kinds describe the interaction shape; operations decide the authorized path. `invoke` and
+`stream` use `invoke` (omitted on legacy descriptors), a property declares `read` or `write`,
+and an event declares `subscribe`. A readable and writable property is therefore represented
+by two caller-relative affordances. They can carry different input schemas, side effects,
+scopes and grants, so permission to observe `light.on` never implies permission to change it.
 
 `latency_class: human` is what lets a person sit in the same participant list as a GPU without
 the runtime needing a special case.
@@ -107,9 +114,11 @@ One call is a stream of events, terminating **exactly once**:
 | `finished` | terminal success; `result` is JSON matching `output_schema` |
 | `failed` | terminal failure with a code |
 
-The invariant is enforced centrally in `guarded()`, not by convention, so a misbehaving
-third-party adapter still terminates once. Task states are A2A's verbatim, so the projection
-is a rename rather than a lossy mapping.
+The router dispatches `invoke`, `read`, `write` and `subscribe` through the matching adapter
+operation after one authorization and validation path. The invariant is enforced centrally
+in `guarded()`, not by convention, so a misbehaving third-party adapter still terminates
+once. Task states are A2A's verbatim, so the projection is a rename rather than a lossy
+mapping.
 
 ## Grants
 

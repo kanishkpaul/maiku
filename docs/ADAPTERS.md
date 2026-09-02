@@ -1,7 +1,8 @@
 # Writing an adapter
 
-Four methods. Everything else — authorization, validation, artifact scoping, human
-escalation, sequencing, cancellation, tracing — is the runtime's job.
+Every adapter describes and invokes. Physical adapters may also read or write properties
+and subscribe to events. Everything else — authorization, validation, artifact scoping,
+human escalation, sequencing, cancellation, tracing — is the runtime's job.
 
 ```python
 from maiku.adapters import Adapter, register
@@ -14,6 +15,9 @@ class MyAdapter(Adapter):
     async def open(cls, uri): ...          # connect; called once
     async def describe(self): ...          # produce the descriptor
     def invoke(self, affordance, arguments, ctx): ...   # async generator of events
+    def read_property(self, affordance, arguments, ctx): ...  # optional
+    def write_property(self, affordance, arguments, ctx): ... # optional
+    def subscribe(self, affordance, arguments, ctx): ...      # optional
     async def probe(self): ...             # optional; defaults to describe()
     async def close(self): ...             # optional
 ```
@@ -36,6 +40,12 @@ finish quietly. It also drops anything after a terminal event.
 stalls every other participant in the session.
 
 **Check `ctx.raise_if_cancelled()`** inside any loop.
+
+**Separate property authority by operation.** A property read and write are distinct
+affordances with `operation: read` and `operation: write`. They need independent schemas,
+side-effect declarations and scopes. Event affordances declare `operation: subscribe`.
+The base adapter returns `unknown_affordance` for any optional operation it does not
+implement.
 
 **Be honest in the descriptor.** `side_effects`, `determinism` and `device` are what the
 runtime and other participants act on. Declaring `cuda` on a machine with `mps`, or `none` on
