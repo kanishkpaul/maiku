@@ -24,7 +24,8 @@ anything that computes  →  Adapter  →  Participant  →  shared runtime
 uv sync
 ```
 
-Heavy runtimes are optional extras: `maiku[torch]`, `maiku[hf]`, `maiku[llm]`, `maiku[net]`.
+Heavy runtimes are optional extras: `maiku[torch]`, `maiku[hf]`, `maiku[llm]`, `maiku[net]`,
+and `maiku[web]` for the live control room.
 `import maiku` pulls in none of them.
 
 ## Sixty seconds
@@ -34,6 +35,7 @@ maiku add python:mypackage.scoring          # a module becomes a participant
 maiku add ollama:qwen3:8b                   # a local model
 maiku add "mcp:npx -y @modelcontextprotocol/server-filesystem ./work"
 maiku add "human:you?channel=cli"           # yes, a person
+maiku add auto:localhost:8000               # or just an address: maiku finds out what is there
 
 maiku ls
 maiku find "transcribe audio"
@@ -53,6 +55,9 @@ Two worked examples:
   stops for human approval.
 - [`examples/triage`](examples/triage/README.md) — five participants on one task, including
   the moment the runtime refuses an over-reaching call.
+- `examples/constellation` — non-LLM participants (a rule verifier and others) working
+  alongside a local Gemma narrator. `examples/constellation/live_demo.sh` runs it in the
+  terminal; the live control room below runs it in the browser.
 
 ## The model
 
@@ -79,6 +84,22 @@ the runtime can actually enforce.
 capabilities, fewer scopes, fewer artifacts, a lower side-effect ceiling, an earlier expiry.
 Bounded delegation is the thing MCP, A2A and ACP all leave to trust.
 
+Grants also decide what a caller can *see*. An affordance exists only for a caller whose grant
+covers it: `maiku serve` exposes only what the client's grant covers (nothing without one),
+and hides agent cards with no afforded capability. `maiku describe` answers the same question
+for a given caller:
+
+```bash
+maiku describe local/vision --grant 'local/vision#classify'   # what this caller would see
+maiku serve mcp --grant 'local/vision#classify'                # serve only that
+```
+
+Omit `--grant` to act as the local operator, who holds everything.
+
+**Capability id** — `id` says *which* participant this is; `capability_id` says what it is
+*one of*. It hashes the affordance set without the handle, so two participants that afford
+exactly the same thing under different names share a `capability_id`.
+
 ## Adapters
 
 | Scheme | Adapts | Example |
@@ -92,6 +113,14 @@ Bounded delegation is the thing MCP, A2A and ACP all leave to trust.
 | `torch` | an `nn.Module` or TorchScript file | `torch:mypkg:Model` |
 | `hf` | a Hugging Face pipeline | `hf:openai/whisper-tiny?task=automatic-speech-recognition` |
 | `human` | a person | `human:you?channel=cli` |
+| `auto` | whatever answers at an address | `auto:localhost:8000` |
+
+`auto:` points maiku at an address and lets its readers work out what is there. Today it
+reads an OpenAPI document and an MCP endpoint at the same address and assembles one
+descriptor; each binding names the affordances it actually serves, and a reader that finds
+nothing says which addresses it tried. A bare address (`localhost:8000`,
+`https://api.example.com`) is treated as `auto:`, but a mistyped scheme is reported as
+unknown rather than turned into an address.
 
 Descriptors are **derived**, not written. A Python signature becomes an input schema, a
 docstring becomes the summary, a generator becomes a streaming affordance, an OpenAPI
@@ -124,6 +153,21 @@ when it is not.
 - **Local-first.** One machine, a SQLite registry, remote participants reached as clients.
   Cross-host federation is designed for, not built.
 
+## Live control room
+
+A browser UI over the real control plane, with a DigitCNN, a local LLM, and a person as
+participants:
+
+```bash
+npm install
+npm run demo:live     # control plane on :8787 and the Vite UI on :5173
+npm run dev           # UI only
+npm run test:gui      # Playwright tests for the UI
+```
+
+`demo:live` downloads the MNIST test images once on a fresh checkout (the trained
+checkpoint is already committed). Set `MAIKU_DEMO_PACE` to change the demo's pacing.
+
 ## Development
 
 ```bash
@@ -136,6 +180,14 @@ Every adapter subclasses one conformance contract (`tests/conformance/contract.p
 descriptor validity, hash stability, stream discipline, cancellation, schema enforcement and
 projection. Twelve adapters written to a convention become twelve dialects; written to a
 suite they stay one protocol.
+
+On a fresh clone the suite gives 501 passed and 2 skipped: one test needs the MNIST test
+images (see the skip message for the command) and one needs a llama-server on `:8081`.
+
+**Unmerged work.** Branch `codex/stage5-physical-vertical-slice` (3 commits, 2026-09-02)
+adds physical participants: explicit authorization and dispatch for physical operations, a
+governed Hue state-change trace, and WiZ light control over the local API. It is not on
+`main`.
 
 Further reading: [the design](docs/SPEC.md) · [the landscape](docs/LANDSCAPE.md) ·
 [writing an adapter](docs/ADAPTERS.md)
