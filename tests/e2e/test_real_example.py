@@ -20,6 +20,13 @@ torch = pytest.importorskip("torch")
 weights = pytest.mark.skipif(
     not cnn.WEIGHTS.exists(), reason="run: uv run python -m examples.real.cnn"
 )
+# The weights are committed but the MNIST data is gitignored, so a fresh clone has
+# weights and no test images.
+mnist_test_set = pytest.mark.skipif(
+    not (cnn.DATA / "MNIST" / "raw" / "t10k-images-idx3-ubyte").exists(),
+    reason="MNIST test images not downloaded: run uv run --extra torch --group dev "
+    "examples/constellation/2026-09-01-live-control-room/bootstrap_live_control_room.py",
+)
 
 
 def llama_is_up() -> bool:
@@ -38,6 +45,7 @@ async def session(tmp_path):
 
 
 @weights
+@mnist_test_set
 async def test_the_trained_cnn_reads_real_mnist_digits(session):
     """Ten real test images, against their human-written labels."""
     correct = 0
