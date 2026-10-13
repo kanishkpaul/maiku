@@ -13,3 +13,9 @@
 /test-results/
 /playwright-report/
 *.tsbuildinfo
+.pytest_cache/
+.ruff_cache/
+
+# Preserve local demo data when switching between main and old.
+/examples/real/data/
+/.maiku-live-demo/
