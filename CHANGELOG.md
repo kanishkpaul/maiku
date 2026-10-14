@@ -4,6 +4,8 @@
 
 - Added the shared design system in `design/`, copied from the design kit master
   that lives next to this repository. See `docs/decisions/0002-design-system.md`.
+- Made the repository public, by the owner's decision. The license and
+  development direction are unchanged.
 
 ## Unreleased — rebuild foundation, 2026-10-13
 

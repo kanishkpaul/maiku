@@ -10,7 +10,8 @@ acceptance gates, not calendar estimates. Check boxes only after evidence exists
 - [x] Decide stack, module ownership, contracts, and extension lifecycle.
 - [x] Record free/open-source direction and Apache-2.0 license.
 - [x] Write shared agent instructions, coding/commenting standards, and attribution checks.
-- [ ] Publish repository visibility and a release when the owner chooses to do so.
+- [x] Make the repository public (owner's decision, 2026-10-14).
+- [ ] Publish a release when the owner chooses to do so.
 
 These checkmarks describe the foundation files. No runtime stage below is complete.
 
