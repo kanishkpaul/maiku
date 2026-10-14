@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — design system, 2026-10-14
+
+- Added the shared design system in `design/`, copied from the design kit master
+  that lives next to this repository. See `docs/decisions/0002-design-system.md`.
+
 ## Unreleased — rebuild foundation, 2026-10-13
 
 - Preserved the previous main implementation at
