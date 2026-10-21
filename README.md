@@ -2,11 +2,14 @@
 
 *the universal kawaii adapter (0w0/)*
 
+> 🏗️ **Under construction.** Maiku is being rebuilt in Rust. The new runtime
+> and app are not implemented yet; this branch contains the foundation and build plan.
+
 Bring models, tools, services, people, and physical systems into one composable
 workspace. Keep their native capabilities. Make their interfaces, authority,
 artifacts, and execution understandable.
 
-Maiku will be free and open source under [Apache-2.0](LICENSE). Local use must
+Maiku is free and open source under [Apache-2.0](LICENSE). Local use must
 work without an account, subscription, or hosted control plane. Optional external
 services can have their own costs; the app must show those before use.
 
@@ -20,7 +23,11 @@ The complete previous implementation is on
 [`old`](https://github.com/kanishkpaul/maiku/tree/old). Its README explains how to
 run it. The transition preserves Git history and does not delete other branches.
 
-## Stack
+The next implementation milestone is a native execution path with one command
+participant, one human participant, permissions, approval, and cancellation. Follow
+the [build plan](docs/BUILD_PLAN.md) for progress and acceptance gates.
+
+## Planned stack
 
 | Area | Decision |
 | --- | --- |
@@ -34,8 +41,8 @@ run it. The transition preserves Git history and does not delete other branches.
 | ML and language-specific integrations | Optional separate workers, including Python |
 
 See [the stack decision](docs/decisions/0001-stack.md) for comparisons and
-tradeoffs. No Python interpreter, Node server, model weights, or desktop webview
-is required by the headless base installation.
+tradeoffs. The planned headless base installation will not require a Python
+interpreter, Node server, model weights, or desktop webview.
 
 ## Start here
 
@@ -59,4 +66,6 @@ git config --local core.hooksPath .githooks
 
 Python is used only for the current development check, not the planned product
 runtime. Build commands will be added when the corresponding packages exist.
-Do not publish installation commands for software that has not shipped.
+Installation and quickstart instructions for the rebuild will be added when a
+runnable implementation is available. To try the previous implementation, use
+the instructions on [`old`](https://github.com/kanishkpaul/maiku/tree/old).
