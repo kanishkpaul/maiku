@@ -2,7 +2,7 @@ name: Repository checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, "codex/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -10,17 +10,46 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: repository-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   foundation:
-    runs-on: ubuntu-latest
+    name: Foundation (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check documents and new commit attribution
-        run: python3 scripts/check_repository.py --event-path "$GITHUB_EVENT_PATH"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check public documents, local-only paths, and new commit attribution
+        run: python scripts/check_repository.py --event-path "${{ github.event_path }}"
       - name: Test repository checks
-        run: python3 -m unittest scripts/test_check_repository.py
-      - name: Check whitespace
-        run: git diff --check HEAD^ HEAD
+        run: python -m unittest scripts/test_check_repository.py
+      - name: Check changed whitespace
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          import os
+          import subprocess
+          from pathlib import Path
+          from scripts.check_repository import event_range
+          revisions = event_range(Path(os.environ["GITHUB_EVENT_PATH"]))
+          command = ["git", "diff", "--check", revisions] if revisions else ["git", "show", "--format=", "--check", "HEAD"]
+          subprocess.run(command, check=True)
+          PYTHON

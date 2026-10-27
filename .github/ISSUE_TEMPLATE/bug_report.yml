@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible repository or implemented behavior problem.
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The Rust rebuild is a foundation, not a released runtime. Name the branch and commit.
+        Keep private data, credentials, local plans, and exploit details out of public issues.
+        Use SECURITY.md for private security reporting.
+  - type: input
+    id: revision
+    attributes:
+      label: Branch and commit
+      placeholder: main at <commit>
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include the command or steps, environment, and a minimal public fixture.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected and observed behavior
+      description: Include relevant output with private information removed.
+    validations:
+      required: true

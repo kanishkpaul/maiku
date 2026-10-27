@@ -14,3 +14,5 @@ systems, targets, and measured results.
 - [ ] Code and comments follow docs/CODING_STYLE.md.
 - [ ] New commits and changed material contain no coding-agent attribution.
 - [ ] Third-party license notices are preserved.
+- [ ] Semantic unknowns and conflicts are explicit; evidence records tested conditions and limits.
+- [ ] Local planning, private data, and credentials are absent from the diff.

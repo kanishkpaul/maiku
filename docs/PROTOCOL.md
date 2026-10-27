@@ -19,7 +19,33 @@ they refer to the same state. Subscription is long-lived work and can be revoked
 Discovery must return an executable binding or mark the capability non-executable
 with a specific reason. Preserve operation IDs, HTTP method/path/parameter maps,
 transport versions, authentication references, and source conflicts.
-Never infer undocumented meaning, fabricate schemas, or silently reconcile conflicts.
+Never present inferred meaning as declared or verified, fabricate schemas, or
+silently reconcile conflicts.
+
+## Interaction semantics and evidence
+
+An interaction contract includes preconditions, known state/freshness requirements,
+observable postconditions, and limits on what can be concluded. Semantic metadata
+may include units, media types, tensor layout and normalization. Use versioned
+domain extensions where necessary; do not require a universal ontology.
+Unknown, conflicting, absent, and incompatible are distinct states.
+
+Record source declarations separately from inferred proposals and test observations.
+Operator policy controls permitted use independently of all three. Source references
+include origin and revision/hash; verification reports include the operation and
+implementation/binding revision, environment, test/evaluator version, permitted
+scope, observations, time, and coverage limits. Reports can be passed, failed,
+inconclusive, or stale. Passing one probe does not verify every operation.
+
+Verification tests are ordinary governed operations. Observation-only authority
+cannot authorize a write probe. Test failure cannot be relabeled success by a
+proposal generator. Evidence must not embed credentials or expose private payloads.
+Health, schema validity, semantic correctness, and authority are separate checks.
+
+An activated binding refers to the reviewed contract revision and applicable
+evidence. Interface or semantic drift produces a diff and marks dependent evidence
+stale. Pin running work to its revision; stop or request review when a required
+condition no longer holds. A repair is a candidate subject to the same checks.
 
 ## Events and results
 

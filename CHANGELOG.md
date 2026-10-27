@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — thesis and repository preparation, 2026-10-28
+
+- Aligned the README, product, architecture, and contract docs with the thesis:
+  native meaning, evidence-backed adaptation, bounded verification, and local control.
+- Added a thesis and current-status page; kept detailed owner planning local.
+  The previously tracked plan remains in Git history.
+- Clarified agent instructions, contribution scope, and adaptation trust boundaries.
+- Added cross-platform repository checks, local-planning guards, issue templates,
+  and workflow dependency updates. No runtime or new app is shipped here.
+
 ## Unreleased — design system, 2026-10-14
 
 - Added the shared design system in `design/`, copied from the design kit master

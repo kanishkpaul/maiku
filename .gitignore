@@ -19,3 +19,9 @@
 # Preserve local demo data when switching between main and old.
 /examples/real/data/
 /.maiku-live-demo/
+
+# Owner-only planning and preserved scratch material.
+/.local/
+/tmp/
+/docs/STRATEGY_REVIEW_2026-10-28.md
+/.impeccable/

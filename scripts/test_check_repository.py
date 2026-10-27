@@ -5,7 +5,62 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.check_repository import event_range, message_errors
+from scripts.check_repository import (
+    REQUIRED,
+    document_errors,
+    event_range,
+    local_path_errors,
+    message_errors,
+)
+
+
+class PublicationChecks(unittest.TestCase):
+    def test_rejects_tracked_planning_and_scratch_files(self):
+        paths = [
+            ".local/BUILD_PLAN.md",
+            "tmp/session.txt",
+            "docs/BUILD_PLAN.md",
+            "docs/STRATEGY_REVIEW_2026-10-28.md",
+        ]
+        self.assertEqual(len(local_path_errors(paths)), len(paths))
+        self.assertFalse(local_path_errors([
+            "docs/THESIS.md", "docs/STATUS.md", "scripts/check_repository.py",
+        ]))
+
+    def make_foundation(self, root):
+        for name in REQUIRED:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("Foundation document.\n", encoding="utf-8")
+        (root / "CLAUDE.md").write_text("Read [AGENTS.md](AGENTS.md).\n", encoding="utf-8")
+        (root / "AGENTS.md").write_text("Read docs/CODING_STYLE.md.\n", encoding="utf-8")
+
+    def test_public_foundation_does_not_require_private_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_foundation(root)
+            self.assertFalse(document_errors(root))
+
+    def test_checks_html_navigation_and_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_foundation(root)
+            (root / "README.md").write_text(
+                '<a href="docs/THESIS.md">Thesis</a>\n'
+                '<img src="missing.svg" alt="Missing" />\n', encoding="utf-8")
+            errors = document_errors(root)
+            self.assertEqual(errors, ["broken local link: README.md -> missing.svg"])
+
+    def test_rejects_links_outside_checkout_and_in_nested_templates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_foundation(root)
+            template = root / ".github/ISSUE_TEMPLATE/bug.md"
+            template.parent.mkdir(parents=True)
+            template.write_text("[Outside](../../../outside.md)\n", encoding="utf-8")
+            errors = document_errors(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("broken local link", errors[0])
 
 
 class AttributionChecks(unittest.TestCase):

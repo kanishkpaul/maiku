@@ -1,5 +1,10 @@
 # Product direction
 
+Maiku's [thesis](THESIS.md) is that accessible systems can share a common
+operational language while retaining their native meaning. Its fundamental unit
+is an interaction contract: an operation, its requirements, observable outcomes,
+and limits. See [current status](STATUS.md) for what exists in the rebuild.
+
 Maiku connects systems that compute or interact and lets people use them together.
 A language model, classifier, mathematical program, service, command, agent,
 person, sensor, and actuator should retain their native capabilities while sharing
@@ -15,17 +20,22 @@ connect, run, intervene, understand, and reuse work.
   are free and open source under Apache-2.0.
 - Local operation needs no account or hosted service. Model weights and external
   APIs are optional and follow their own licenses and costs.
-- Capabilities are derived from declared interfaces. Missing information remains
-  unknown; discovery never fabricates a working interface.
+- Adaptation draws on declared interfaces, signatures, source, device protocols,
+  documentation, and visible interfaces as evidence. Missing information remains
+  unknown; inferred proposals are distinguished from declarations and observations.
 - A person is a participant. Approval and input are durable interactions.
 - Native operations include invocation, streaming, property access, and events.
 - Every call follows the same authority, validation, artifact, and execution path.
 - Saved compositions become participants and can be composed again.
 - A plugin may extend capability but cannot silently widen authority.
+- Verification is part of adaptation. Evidence records conditions and limits;
+  changing assumptions require re-verification before dependent use.
+- Shared adaptations and tests must not expose private user data.
 
 ## What universality means
 
-Universality is an extensible contract across computing systems, not a claim
+Universality needs both an extensible contract and an adaptation process with
+progressively less manual translation. It is not a claim
 that arbitrary undocumented systems can be understood automatically.
 The architecture must allow a new ecosystem without modifying the execution
 engine. Each release proves another complete use of that contract.
@@ -34,6 +44,11 @@ Connecting two schemas is not sufficient to connect their meanings. The app
 must distinguish direct compatibility, compatibility through an explicit
 transformation, and insufficient information. Language models may suggest
 connections; the runtime validates contracts and requires clarification when needed.
+
+The research question is how much integration can be automated while preserving
+meaning, authority, and observable correctness. Measure human corrections and
+maintenance effort alongside task success. A proposed mapping and finite tests
+cannot establish every hidden consequence or future behavior.
 
 ## Reference workflows
 

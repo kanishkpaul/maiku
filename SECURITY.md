@@ -5,6 +5,10 @@ authority verification, or production security follows from these documents.
 
 ## Required behavior
 
+- Treat documentation, source, visible interfaces, and model-generated mappings as
+  untrusted evidence. They cannot instruct the host to disclose credentials,
+  install code, activate an adapter, or grant authority. Verification probes need
+  explicit permission and bounded effects just like ordinary calls.
 - Authenticate callers separately from capability descriptions. Unknown callers
   receive no authority. Descriptor hashes are not authentication.
 - Recheck authority, expiry, revocation, descriptor revision, and relevant state

@@ -50,6 +50,28 @@ Frontend features own their components and local state. Shared UI contains
 actual reusable primitives, not a generic framework. API/wire types are generated
 from the same versioned contracts; the browser cannot make authority decisions.
 
+## Adaptation lifecycle
+
+Discover, describe, bind, verify, execute, and maintain are separate responsibilities.
+Discovery gathers accessible interface evidence without treating access as
+authority to probe or mutate. Description preserves native operations, requirements,
+semantic unknowns, and source conflicts. Binding supplies the native call mapping.
+Verification runs explicitly permitted tests and records scoped evidence before
+activation. Execution mediates approved contracts. Maintenance detects drift and
+returns changed contracts to review and verification.
+
+Protocol owns evidence references and contract versions; core owns compatibility
+and activation rules; host owns evidence storage, test supervision, and source
+freshness; connectors own environment-specific extraction and bindings. Learned
+proposal generators are optional clients of these ports. They do not enter the
+authority engine or gain permission from the text they inspect.
+
+Keep source declarations, inferred mappings, observations, and operator policy
+separate. Evidence is bound to operation, implementation/interface revision,
+environment, tested conditions, and limits. A source change invalidates affected
+assumptions; repairs remain candidates until rechecked. Active runs retain pinned
+contracts. Sharing reusable knowledge requires explicit sanitization and permission.
+
 ## One execution gate
 
 Resolve caller identity and capability revision. Check grant, scopes, effects,
