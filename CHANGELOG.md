@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — foundation presentation, 2026-10-28
+
+- Simplified the public README to match the project’s pre-development state.
+  The full product presentation, demo, and installation guide follow implementation
+  and verification. The thesis and development contracts remain available.
+
 ## Unreleased — thesis and repository preparation, 2026-10-28
 
 - Aligned the README, product, architecture, and contract docs with the thesis:

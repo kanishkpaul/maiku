@@ -1,128 +1,75 @@
-<div align="center">
+# maiku
 
-<h1>maiku</h1>
+*the universal kawaii adapter (0w0/)*
 
-<p><em>the universal kawaii adapter (0w0/)</em></p>
+> **Under construction — Rust rebuild in progress.** This branch contains the
+> project foundation and repository tooling. There is no runnable Rust runtime,
+> CLI, or new app yet.
 
-<h3>Different systems. A common language for interaction.</h3>
+Maiku is being built as a free, open-source, local-first adapter for accessible
+systems. Its goal is a common operational language through which models, tools,
+services, devices, and interfaces can cooperate while keeping their native meaning
+and leaving people in control.
 
-<p>Discover what a system can do. Preserve what its operations mean.<br />
-Connect capabilities while keeping people in control.</p>
+A neural network should remain a model. A fridge should expose temperatures and
+controls. A dashboard should expose views, filters, and actions. The shared unit
+is an **interaction contract**: what can be observed or requested, what it requires,
+what may happen, and who is allowed to do it.
 
-<p>
-  <a href="docs/THESIS.md">The thesis</a> ·
-  <a href="docs/ARCHITECTURE.md">Architecture</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a> ·
-  <a href="LICENSE">Apache-2.0</a>
-</p>
+Read [the thesis](docs/THESIS.md) for the full direction.
 
-</div>
+## Current state
 
----
+`main` contains the architecture, design contracts, coding standards, shared
+instructions for coding assistants, and repository checks. These establish the
+foundation; they do not implement the system described above.
 
-> **Under construction.** This branch contains the foundation for a Rust rebuild:
-> contracts, architecture, design rules, and repository tooling. The new runtime
-> and app are not implemented. The previous implementation lives on
-> [`old`](https://github.com/kanishkpaul/maiku/tree/old).
+Automatic adaptation, semantic compatibility checks, verification reports,
+durable execution, connectors, and the workspace app remain unimplemented in the
+rebuild. There is no installer or product quickstart yet.
 
-## One connective layer, native capabilities
+The previous implementation is preserved on
+[`old`](https://github.com/kanishkpaul/maiku/tree/old), with its own run instructions.
+New development belongs on `main`. Detailed build planning stays local.
 
-A neural network accepts tensors. A fridge exposes temperatures and controls.
-A dashboard offers views, filters, and actions. Cooperation starts with the same
-questions: **what can I observe, what can I request, what will happen, and am I
-allowed to do it?**
+## Direction
 
-Maiku's thesis is that these interactions can share a common operational language
-while retaining their native meaning. A model remains a model. An appliance
-remains an appliance. A dashboard remains a dashboard.
+- **Preserve meaning.** Contracts must carry known requirements and expose unknowns.
+  Matching input shapes alone does not establish compatibility.
+- **Adapt from evidence.** Interfaces, signatures, source, protocols, documentation,
+  and visible controls can support a proposed binding. Proposals require checks.
+- **Verify within limits.** Test permitted behavior and retain its conditions,
+  failures, and limits. Changes require affected assumptions to be checked again.
+- **Keep authority explicit.** Discovery and approval cannot silently grant access.
+  People control activation, data sharing, and consequential actions.
 
-The common unit is an **interaction contract**: an operation, its requirements,
-its observable outcomes, and its limits. Maiku aims to make those contracts
-discoverable, executable, and verifiable across accessible systems.
+The accepted stack is Rust for the core and CLI, Tokio, SQLite, optional language
+workers, a Svelte/TypeScript interface, and an optional Tauri shell. See the
+[stack decision](docs/decisions/0001-stack.md) for the tradeoffs.
+Local operation must work without an account or hosted control plane.
 
-## What the contract must preserve
+## Work on the foundation
 
-| Question | What Maiku must make explicit |
-| --- | --- |
-| What is available? | Native operations, observations, properties, and events |
-| What does it mean? | Units, formats, preprocessing, state, and contextual requirements |
-| How can I use it? | Executable bindings, versions, and credential references |
-| What may happen? | Effects, failures, cancellation, and uncertain outcomes |
-| Am I allowed? | Caller identity, scoped authority, and human decisions |
-| Why trust this mapping? | Source evidence, observed tests, conditions, and verification limits |
-
-Identical tensor shapes do not establish identical preprocessing. Two controls
-named `reset` may have very different consequences. Unknown meaning must remain
-visible; a plausible mapping is a proposal until its stated conditions are checked.
-
-## How the pieces fit
-
-**Discover → Describe → Bind → Verify → Execute → Maintain**
-
-Specialized connectors provide access to an environment. Adaptation uses its
-interfaces and available evidence to propose a contract and binding. Verification
-checks permitted behavior and records the conditions under which it worked.
-Execution applies authority, state, artifact, and failure rules consistently.
-Maintenance detects changes and rechecks affected assumptions.
-
-Learned methods may propose mappings and repairs. Explicit checks and human
-decisions constrain activation and execution. Finite tests establish bounded
-evidence; they cannot reveal every hidden consequence or guarantee future behavior.
-
-Read the [full thesis](docs/THESIS.md) and
-[interaction contract](docs/PROTOCOL.md).
-
-## Built around local control
-
-- **Native and headless.** Rust core and CLI; optional language and model workers.
-- **Local by default.** Local use must work without an account or hosted control plane.
-- **One execution gate.** Authority, validation, approval, and artifact access share a path.
-- **Open and extensible.** Apache-2.0; connectors extend access without changing the core.
-- **Evidence over assurances.** Declared, inferred, and observed behavior remain distinct.
-- **Private by default.** Reusable tests and adaptations must not expose user data.
-
-These are design commitments. See [current status](docs/STATUS.md) for what exists.
-External services and model weights may have their own costs and licenses.
-
-## Inside the foundation
-
-| Area | Direction |
-| --- | --- |
-| Contracts and execution | Rust, Serde, Tokio; bounded work and explicit cancellation |
-| Local state and artifacts | SQLite; content-addressed filesystem storage |
-| Network surface | Optional Axum API; Reqwest with rustls |
-| Workspace app | Svelte 5, strict TypeScript, Vite, shared design tokens |
-| Desktop | Optional Tauri 2 shell |
-| Ecosystem access | Optional connectors and separate workers, including Python |
-
-The [stack decision](docs/decisions/0001-stack.md) records the tradeoffs.
-No Cargo workspace or new app is present yet. Installation instructions will
-arrive with a runnable implementation; the preserved prototype has its own
-[run instructions](https://github.com/kanishkpaul/maiku/tree/old).
-
-## Work on Maiku
+Read [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
+[the coding standards](docs/CODING_STYLE.md) before editing.
 
 ```sh
 python3 scripts/check_repository.py
 python3 -m unittest scripts/test_check_repository.py
 git diff --check
-git config --local core.hooksPath .githooks
 ```
 
-Python currently runs repository checks only; it is not a dependency of the
-planned native base runtime. Read [CONTRIBUTING.md](CONTRIBUTING.md) and
-[AGENTS.md](AGENTS.md) before making changes.
+These check repository documents and tooling only. Python is currently used for
+those checks; it is not a dependency of the planned native base runtime.
 
-| Read | For |
-| --- | --- |
-| [Thesis](docs/THESIS.md) · [Product](docs/PRODUCT.md) | Purpose, scope, and public benefit |
-| [Status](docs/STATUS.md) | Implemented foundation and current limits |
-| [Architecture](docs/ARCHITECTURE.md) · [Protocol](docs/PROTOCOL.md) | Ownership and interaction contracts |
-| [Extensions](docs/EXTENSIONS.md) | Adding, disabling, and removing capabilities |
-| [Testing](docs/TESTING.md) · [Performance](docs/PERFORMANCE.md) | Evidence and measurement rules |
-| [Coding standards](docs/CODING_STYLE.md) · [Design](design/README.md) | Code and interface conventions |
-| [Security](SECURITY.md) · [Research](docs/RESEARCH.md) | Trust boundaries and design references |
+[Current status](docs/STATUS.md) · [Architecture](docs/ARCHITECTURE.md) ·
+[Interaction contract](docs/PROTOCOL.md) · [Extensions](docs/EXTENSIONS.md) ·
+[Testing](docs/TESTING.md) · [Security](SECURITY.md)
 
-<div align="center">
-<p><em>Make any accessible system a dependable participant in a larger world of cooperating systems.</em></p>
-</div>
+The full product README, real demo, and installation guide will follow a working,
+verified implementation.
+
+## License
+
+[Apache-2.0](LICENSE). Third-party integrations, model weights, and external
+services retain their own licenses, terms, and costs.
