@@ -18,7 +18,8 @@ REQUIRED = (
     "CHANGELOG.md",
     "LICENSE",
     "docs/PRODUCT.md",
-    "docs/BUILD_PLAN.md",
+    "docs/THESIS.md",
+    "docs/STATUS.md",
     "docs/ARCHITECTURE.md",
     "docs/PROTOCOL.md",
     "docs/EXTENSIONS.md",
@@ -43,6 +44,17 @@ AGENT_IDENTITY = re.compile(
     re.IGNORECASE,
 )
 LINK = re.compile(r"\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)")
+HTML_LINK = re.compile(r"\b(?:href|src)=[\"']([^\"']+)[\"']", re.IGNORECASE)
+LOCAL_ONLY_PREFIXES = (".local/", "tmp/")
+LOCAL_ONLY_FILES = {"docs/BUILD_PLAN.md", "docs/STRATEGY_REVIEW_2026-10-28.md"}
+
+
+def local_path_errors(paths: list[str]) -> list[str]:
+    return [
+        f"local-only file must not be tracked: {path}"
+        for path in paths
+        if path.startswith(LOCAL_ONLY_PREFIXES) or path in LOCAL_ONLY_FILES
+    ]
 
 
 def message_errors(message: str, identity: str = "") -> list[str]:
@@ -57,12 +69,12 @@ def message_errors(message: str, identity: str = "") -> list[str]:
 def document_errors(root: Path) -> list[str]:
     errors = [f"missing required file: {name}" for name in REQUIRED if not (root / name).is_file()]
     documents = list(root.glob("*.md")) + list((root / "docs").rglob("*.md"))
-    documents += list((root / ".github").glob("*.md"))
+    documents += list((root / ".github").rglob("*.md"))
     for document in documents:
         body = document.read_text(encoding="utf-8")
         if not body.strip():
             errors.append(f"empty document: {document.relative_to(root)}")
-        for target in LINK.findall(body):
+        for target in LINK.findall(body) + HTML_LINK.findall(body):
             parsed = urlsplit(target.strip("<>"))
             if parsed.scheme or parsed.netloc or not parsed.path:
                 continue
@@ -113,6 +125,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         errors = [] if args.message_file else document_errors(ROOT)
+        if not args.message_file:
+            # Check the index so force-adding an ignored plan still blocks publication.
+            errors.extend(local_path_errors(git("ls-files", "-z").strip("\0").split("\0")))
         if args.message_file:
             errors.extend(message_errors(args.message_file.read_text(encoding="utf-8")))
         revision_range = args.commits or (event_range(args.event_path) if args.event_path else None)

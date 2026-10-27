@@ -1,9 +1,14 @@
 # Contributing
 
-Maiku is being rebuilt as a free, local-first composition workspace. The first
-contribution should close a specific acceptance gate in
-[the build plan](docs/BUILD_PLAN.md). Read [AGENTS.md](AGENTS.md) and
+Maiku is being rebuilt as a free, local-first interoperability system. Start with
+[the thesis](docs/THESIS.md) and [current status](docs/STATUS.md). Scope a
+contribution through a concrete issue or task with observable acceptance conditions.
+Read [AGENTS.md](AGENTS.md) and
 [the coding standards](docs/CODING_STYLE.md) first.
+
+Detailed owner planning stays local. No private file, model download, hosted
+account, or paid API is needed for the repository checks. Architecture and
+protocol documents describe target behavior; the Rust rebuild is not executable yet.
 
 ## Make a change
 
@@ -26,6 +31,8 @@ explaining the problem, alternatives, decision, and consequences.
 ```sh
 git config --local core.hooksPath .githooks
 python3 scripts/check_repository.py
+python3 -m unittest scripts/test_check_repository.py
+git diff --check
 python3 scripts/check_repository.py --commits BASE..HEAD
 ```
 
@@ -49,6 +56,9 @@ and failure paths that matter.
 - Claimed measurements include the workload and environment.
 - New commits and changed material contain no coding-agent attribution.
 - Third-party notices are preserved.
+- Semantic unknowns and conflicts are explicit; declarations and observed evidence differ.
+- Verification probes use explicit authority and record their conditions and limits.
+- Local planning, scratch material, secrets, and private user data stay out of changes.
 
 Review descriptions should explain the problem, resulting behavior, validation,
 and any material limitation. Avoid a transcript of the implementation process.

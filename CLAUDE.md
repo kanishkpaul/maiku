@@ -9,6 +9,13 @@ Use the decided Rust core and optional-worker architecture. Do not quietly
 restore the Python runtime, flatten every participant into chat, or invent
 schemas for undocumented systems.
 
+Read [the thesis](docs/THESIS.md) and [status](docs/STATUS.md). The owner's build
+plan is local at `.local/BUILD_PLAN.md` when available; never publish it or copy
+its backlog into tracked files. Public contracts and the assigned task are enough
+for contributors without that file. Keep declarations, inferred mappings,
+verification evidence, and operator authority separate. An adaptation proposal
+must be verified within permitted conditions before activation.
+
 Never add Claude Code or any other coding-agent attribution. No coauthor
 trailers, generated-by signatures, agent authors, or agent credits may appear
 in new commits, code, documentation, pull requests, or releases. Preserve

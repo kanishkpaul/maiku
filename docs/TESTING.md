@@ -4,12 +4,15 @@
 
 ```sh
 python3 scripts/check_repository.py
+python3 -m unittest scripts/test_check_repository.py
 python3 scripts/check_repository.py --commits BASE..HEAD
 git diff --check
 ```
 
 The repository check validates required documents, relative file links, and
-foundation consistency. The commit check rejects coauthor trailers, common
+foundation consistency, and accidentally tracked local planning. It checks local
+Markdown links and HTML image/navigation targets without fetching external URLs.
+The commit check rejects coauthor trailers, common
 coding-agent signatures, and recognizable agent identities in new commits.
 It does not rewrite or police historical commits. Local hook and CI checks are
 guardrails, not proof that every conceivable attribution form is detected.
@@ -42,6 +45,9 @@ Set up dependency/license checks and meaningful cross-platform CI as packages la
 | Identity | Cross-language canonical vectors, ordering, distinct positions, revisions, collision-safe projection names |
 | Authority | Unknown caller, attenuation widening, expiry during approval, revoked parent, wrong audience, artifact denial |
 | Discovery | Multiple interfaces, equal schema/different effects, inaccessible endpoint, stale contract, executable binding |
+| Semantics | Equal shape/different normalization, wrong units, ambiguous reset, stale state, explicit tested conversion |
+| Evidence | Declaration vs observation, limited coverage, failed/inconclusive probe, changed revision, private payload handling |
+| Adaptation | Proposal cannot activate itself, forbidden probe, conflicting source, reviewed repair, stale evidence |
 | Adapter | Valid descriptor, input/output schema, one terminal event, cancellation, cleanup, timeout, failure |
 | Worker | Protocol mismatch, oversized/malformed frames, crash, stdout pollution, cancel escalation, uncertain write |
 | Durability | Restart before/after dispatch, duplicate events/answers, pending approval recovery, retention gaps |

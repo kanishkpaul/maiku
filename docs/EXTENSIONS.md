@@ -10,6 +10,8 @@ owned interfaces. They must not become special cases in core.
 | --- | --- | --- |
 | Adapter | Native invocation, property operations, or events | Internal object-safe adapter port or worker protocol |
 | Discoverer | Read declared capabilities and executable bindings | Discoverer contract, explicit merge/conflict rules |
+| Adaptation proposer | Suggest mappings from accessible evidence | Reviewable candidate; cannot activate or grant authority |
+| Verifier | Test permitted behavior and report scoped evidence | Host-supervised operations through the execution gate |
 | Transformation | Convert known representations/units | Ordinary participant with schemas and provenance |
 | Composition | Reusable coordinated work | Ordinary participant backed by a validated graph |
 | Presentation | Display/interact with an existing capability | UI feature over the API; no authority logic |

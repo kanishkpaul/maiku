@@ -1,0 +1,32 @@
+name: Contract or integration proposal
+description: Propose a specific interaction with observable acceptance conditions.
+title: "proposal: "
+body:
+  - type: textarea
+    id: interaction
+    attributes:
+      label: Native interaction and use case
+      description: What should a person or system be able to observe or request?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Accessible interface evidence and unknowns
+      description: Link public specifications or fixtures. State units, preprocessing, state requirements, and unresolved meaning.
+    validations:
+      required: true
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority and consequences
+      description: Describe permitted operations, effects, required human decisions, and failure behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Observable acceptance conditions
+      description: How can permitted tests establish correct interaction? Include negative cases and verification limits. Do not copy local planning or private data here.
+    validations:
+      required: true

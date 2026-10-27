@@ -7,7 +7,8 @@ from the repository owner take precedence.
 
 ## Read before editing
 
-Read [README.md](README.md), [the build plan](docs/BUILD_PLAN.md),
+Read [README.md](README.md), [the thesis](docs/THESIS.md),
+[current status](docs/STATUS.md),
 [the architecture](docs/ARCHITECTURE.md), and
 [the coding standards](docs/CODING_STYLE.md). For an integration, also read
 [the extension contract](docs/EXTENSIONS.md) and [protocol](docs/PROTOCOL.md).
@@ -18,6 +19,33 @@ Do not reset, force-push, rewrite existing history, delete other branches, or
 merge legacy source wholesale. Port a behavior only with its contract and tests.
 The current main branch is a documentation and tooling foundation, not a working
 Rust application. Never describe planned capabilities as implemented.
+
+## Local planning and scope
+
+The owner keeps the detailed build plan at `.local/BUILD_PLAN.md`, ignored by
+Git. Read it when available for an owner-assigned implementation task; otherwise
+use the issue/task's acceptance conditions and public contracts. A missing local
+plan does not prevent contribution. Do not publish its contents, mirror its
+backlog into public docs/issues, or commit local research/scratch files.
+The previous tracked plan remains in Git history; do not rewrite history to remove it.
+
+This preparation branch contains no executable rebuild. Do not restore legacy
+dependencies or invent runnable setup commands. Add real build/test instructions
+and CI when the corresponding package exists.
+
+## Meaning and evidence
+
+Preserve native operations. Discovery, inferred mappings, verification results,
+and operator policy are distinct. Record unresolved semantic requirements and
+conflicts explicitly. Shape equality, an example, a descriptor hash, or a health
+probe does not establish semantic compatibility or authorize execution.
+
+Verification is part of adaptation: permitted tests produce evidence tied to
+operation, revision, environment, conditions, and limits. Probe through the same
+authority gate. A learned proposal cannot activate itself, grant authority, or
+install code. Changed assumptions make affected evidence stale and require
+re-verification. Reuse synthetic or explicitly permissioned fixtures; keep user
+data and credentials out of shared adaptations.
 
 ## Attribution: mandatory
 
